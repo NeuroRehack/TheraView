@@ -100,9 +100,12 @@ Run the pairing helper and press the button on the tripod Bluetooth module when 
 ```
 
 The remote will appear as `Selfie` in Bluetooth scans. Once paired, pressing its button or the web UI button both start/stop recording.
+If your device enumerates the input node at a fixed path (for example `/dev/input/event4`), set `SELFIE_DEVICE_PATH` in `config.conf` so
+the listener can open it directly.
 
 ### Recording status LED
 The recording status LED uses GPIO pin 21 by default. Change the pin assignment in `config.conf` under the `LED_PIN` setting if your wiring differs.
+Running the server as `root` or a user with GPIO permissions is required for the LED to toggle.
 
 Note: If you do not want the system to auto start on systemd or set up the hotspot, edit the config file at config/theraview.config and change these flags: ENABLE_SYSTEMD and ENABLE_HOTSPOT
 

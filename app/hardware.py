@@ -8,10 +8,9 @@ except ImportError:  # pragma: no cover - not available in dev environments
     GPIO = None
 
 try:
-    from evdev import InputDevice, categorize, ecodes, list_devices
+    from evdev import InputDevice, ecodes, list_devices
 except ImportError:  # pragma: no cover - not available in dev environments
     InputDevice = None
-    categorize = None
     ecodes = None
     list_devices = lambda: []
 
@@ -75,8 +74,10 @@ class LedIndicator:
 class SelfieRemoteListener:
     """Listens for key presses from the 'Selfie' Bluetooth remote."""
 
-    def __init__(self, toggle_callback):
+    def __init__(self, toggle_callback, device_name="Selfie", device_path=None):
         self.toggle_callback = toggle_callback
+        self.device_name = device_name
+        self.device_path = device_path
         self.running = False
         self.thread = None
         self.available = InputDevice is not None
@@ -99,10 +100,18 @@ class SelfieRemoteListener:
         set_remote_connected(False)
 
     def _find_device(self):
+        # If the user provided an explicit path, try that first.
+        if self.device_path:
+            try:
+                dev = InputDevice(self.device_path)
+                return dev
+            except Exception:
+                pass
+
         for path in list_devices():
             try:
                 dev = InputDevice(path)
-                if "Selfie" in dev.name:
+                if self.device_name in dev.name:
                     return dev
             except Exception:
                 continue
@@ -122,6 +131,7 @@ class SelfieRemoteListener:
 
             self.connected = True
             set_remote_connected(True)
+            print(f"Listening for remote keypresses from {dev.path} ({dev.name}).")
 
             try:
                 for event in dev.read_loop():
@@ -131,8 +141,11 @@ class SelfieRemoteListener:
                     if event.type != ecodes.EV_KEY:
                         continue
 
-                    key_event = categorize(event)
-                    if key_event.keystate in (key_event.key_down, key_event.key_hold):
+                    if event.value == 1 and event.code in (
+                        ecodes.KEY_VOLUMEUP,
+                        ecodes.KEY_VOLUMEDOWN,
+                        ecodes.KEY_ENTER,
+                    ):
                         self.toggle_callback()
             except Exception:
                 # Device disconnected or read failed; restart search
