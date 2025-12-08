@@ -7,14 +7,28 @@ import signal
 from .video import preview_pipeline, record_pipeline
 from .core import OUTPUT_DIR, BASENAME_PREFIX
 
+
+led_controller = None
+
 proc_lock = threading.Lock()
 preview_proc = None
 record_proc = None
-active_record = True
+active_record = False
 current_filename = ""
 
+
+def set_led_controller(controller):
+    global led_controller
+    led_controller = controller
+    _update_led()
+
+
+def _update_led():
+    if led_controller:
+        led_controller.set(active_record)
+
 def start_preview_only():
-    global preview_proc, active_record
+    global preview_proc
     stop_pipelines()
     preview_proc = subprocess.Popen(
         preview_pipeline(),
@@ -24,7 +38,7 @@ def start_preview_only():
     )
 
 def start_record_plus_preview():
-    global record_proc, current_filename, active_record
+    global record_proc, current_filename
     stop_pipelines()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -62,6 +76,27 @@ def stop_pipelines():
             except:
                 record_proc.kill()
         record_proc = None
+
+
+def set_recording_state(recording: bool):
+    global active_record
+    with proc_lock:
+        if recording == active_record:
+            _update_led()
+            return active_record
+
+        active_record = recording
+        if active_record:
+            start_record_plus_preview()
+        else:
+            start_preview_only()
+
+        _update_led()
+        return active_record
+
+
+def toggle_recording():
+    return set_recording_state(not active_record)
 
 def current_pipe():
     if record_proc:

@@ -8,8 +8,8 @@ import socketserver
 from .ui import HTML_PAGE
 from .core import get_network_ip, get_free_space_gb, PORT
 from .control import (
-    proc_lock, start_record_plus_preview, start_preview_only,
-    current_pipe, stop_pipelines, active_record, current_filename
+    proc_lock, current_pipe, stop_pipelines, active_record, current_filename,
+    toggle_recording,
 )
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -31,13 +31,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if self.path == "/toggle_record":
-            with proc_lock:
-                if active_record:
-                    active_record = False
-                    start_preview_only()
-                else:
-                    active_record = True
-                    start_record_plus_preview()
+            toggle_recording()
             self._simple(b"ok")
             return
 

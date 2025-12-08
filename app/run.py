@@ -1,9 +1,16 @@
 import socketserver
 from .web import Handler
-from .core import get_network_ip, PORT
-from .control import start_record_plus_preview
+from .core import get_network_ip, PORT, LED_PIN
+from .control import set_led_controller, set_recording_state, toggle_recording
+from .hardware import LedIndicator, SelfieRemoteListener
 
 def run():
+    led = LedIndicator(LED_PIN)
+    set_led_controller(led)
+
+    remote_listener = SelfieRemoteListener(toggle_recording)
+    remote_listener.start()
+
     with socketserver.ThreadingTCPServer(("0.0.0.0", PORT), Handler) as httpd:
         ip = get_network_ip()
         if ip:
@@ -11,5 +18,5 @@ def run():
         else:
             print("No network IP found. Device may not be connected.")
 
-        start_record_plus_preview()
+        set_recording_state(True)
         httpd.serve_forever()
