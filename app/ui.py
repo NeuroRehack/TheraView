@@ -13,6 +13,10 @@ HTML_PAGE = b"""
       Recording active
     </div>
 
+    <div id="bt_status" style="font-size: 18px; margin-top: 4px; color: gray;">
+      Bluetooth: checking...
+    </div>
+
     <div id="file_name" style="font-size: 22px; margin-top: 8px; color: black;">
     </div>
 
@@ -86,6 +90,7 @@ HTML_PAGE = b"""
           .then(data => {
             const s = document.getElementById("rec_status");
             const b = document.getElementById("rec_btn");
+            const bt = document.getElementById("bt_status");
 
             if (data.record_active) {
               s.innerText = "Recording active";
@@ -95,6 +100,17 @@ HTML_PAGE = b"""
               s.innerText = "Recording off";
               s.style.color = "gray";
               b.innerText = "Start recording";
+            }
+
+            if (!data.available) {
+              bt.innerText = "Bluetooth remote not available";
+              bt.style.color = "darkred";
+            } else if (data.connected) {
+              bt.innerText = "Bluetooth remote connected";
+              bt.style.color = "green";
+            } else {
+              bt.innerText = "Bluetooth remote searching...";
+              bt.style.color = "orange";
             }
           });
       }

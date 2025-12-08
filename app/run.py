@@ -6,6 +6,8 @@ from .hardware import LedIndicator, SelfieRemoteListener
 
 def run():
     led = LedIndicator(LED_PIN)
+    if getattr(led, "enabled", False):
+        print(f"Recording LED ready on GPIO {LED_PIN}.")
     set_led_controller(led)
 
     remote_listener = SelfieRemoteListener(toggle_recording)

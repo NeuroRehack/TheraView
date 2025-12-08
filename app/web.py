@@ -7,6 +7,7 @@ import socketserver
 
 from .ui import HTML_PAGE
 from .core import get_network_ip, get_free_space_gb, PORT
+from .hardware import remote_status
 from .control import (
     proc_lock, current_pipe, stop_pipelines, active_record, current_filename,
     toggle_recording,
@@ -27,7 +28,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"record_active": active_record}).encode("utf8"))
+            status = {"record_active": active_record, **remote_status()}
+            self.wfile.write(json.dumps(status).encode("utf8"))
             return
 
         if self.path == "/toggle_record":

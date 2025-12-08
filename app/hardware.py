@@ -16,6 +16,28 @@ except ImportError:  # pragma: no cover - not available in dev environments
     list_devices = lambda: []
 
 
+_remote_lock = threading.Lock()
+_remote_connected = False
+
+
+def set_remote_connected(state: bool):
+    global _remote_connected
+    with _remote_lock:
+        changed = _remote_connected != state
+        _remote_connected = state
+    if changed:
+        status = "connected" if state else "disconnected"
+        print(f"Selfie remote {status}.")
+
+
+def remote_status():
+    with _remote_lock:
+        return {
+            "available": InputDevice is not None,
+            "connected": _remote_connected,
+        }
+
+
 class LedIndicator:
     """Simple GPIO LED driver used for recording status."""
 
@@ -58,19 +80,23 @@ class SelfieRemoteListener:
         self.running = False
         self.thread = None
         self.available = InputDevice is not None
+        self.connected = False
 
         if not self.available:
             print("evdev not available; Bluetooth remote control disabled.")
+            set_remote_connected(False)
 
     def start(self):
         if not self.available or self.running:
             return
         self.running = True
+        set_remote_connected(False)
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
     def stop(self):
         self.running = False
+        set_remote_connected(False)
 
     def _find_device(self):
         for path in list_devices():
@@ -88,8 +114,14 @@ class SelfieRemoteListener:
         while self.running:
             dev = self._find_device()
             if dev is None:
+                if self.connected:
+                    self.connected = False
+                    set_remote_connected(False)
                 time.sleep(2)
                 continue
+
+            self.connected = True
+            set_remote_connected(True)
 
             try:
                 for event in dev.read_loop():
@@ -100,9 +132,11 @@ class SelfieRemoteListener:
                         continue
 
                     key_event = categorize(event)
-                    if key_event.keystate == key_event.key_down:
+                    if key_event.keystate in (key_event.key_down, key_event.key_hold):
                         self.toggle_callback()
             except Exception:
                 # Device disconnected or read failed; restart search
+                self.connected = False
+                set_remote_connected(False)
                 time.sleep(1)
 
