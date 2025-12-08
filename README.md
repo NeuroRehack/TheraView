@@ -107,6 +107,8 @@ the listener can open it directly.
 The recording status LED uses GPIO pin 21 by default. Change the pin assignment in `config.conf` under the `LED_PIN` setting if your wiring differs.
 Running the server as `root` or a user with GPIO permissions is required for the LED to toggle.
 
+Set `AUTO_START_RECORDING` to `true` to begin recording as soon as the app launches. Set it to `false` to start in preview-only mode and wait for the web UI or Bluetooth remote to toggle recording.
+
 Note: If you do not want the system to auto start on systemd or set up the hotspot, edit the config file at config/theraview.config and change these flags: ENABLE_SYSTEMD and ENABLE_HOTSPOT
 
 ---

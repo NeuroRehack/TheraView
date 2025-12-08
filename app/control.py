@@ -82,6 +82,10 @@ def set_recording_state(recording: bool):
     global active_record
     with proc_lock:
         if recording == active_record:
+            if recording and record_proc is None:
+                start_record_plus_preview()
+            elif not recording and preview_proc is None:
+                start_preview_only()
             _update_led()
             return active_record
 

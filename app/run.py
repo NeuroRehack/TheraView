@@ -1,6 +1,12 @@
 import socketserver
 from .web import Handler
-from .core import get_network_ip, PORT, LED_PIN, SELFIE_DEVICE_PATH
+from .core import (
+    AUTO_START_RECORDING,
+    get_network_ip,
+    LED_PIN,
+    PORT,
+    SELFIE_DEVICE_PATH,
+)
 from .control import set_led_controller, set_recording_state, toggle_recording
 from .hardware import LedIndicator, SelfieRemoteListener
 
@@ -21,5 +27,5 @@ def run():
         else:
             print("No network IP found. Device may not be connected.")
 
-        set_recording_state(True)
+        set_recording_state(AUTO_START_RECORDING)
         httpd.serve_forever()
