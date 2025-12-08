@@ -109,6 +109,9 @@ Running the server as `root` or a user with GPIO permissions is required for the
 
 Set `AUTO_START_RECORDING` to `true` to begin recording as soon as the app launches. Set it to `false` to start in preview-only mode and wait for the web UI or Bluetooth remote to toggle recording.
 
+### Optional RTC module
+Enable the DS3231 overlay (for example by adding `dtoverlay=i2c-rtc,ds3231` to `/boot/firmware/config.txt`). When an RTC is present, the web UI shows the current RTC time beneath the Bluetooth status.
+
 Note: If you do not want the system to auto start on systemd or set up the hotspot, edit the config file at config/theraview.config and change these flags: ENABLE_SYSTEMD and ENABLE_HOTSPOT
 
 ---

@@ -56,6 +56,10 @@ HTML_PAGE = b"""
       Bluetooth: checking...
     </div>
 
+    <div id="rtc_status" style="font-size: 18px; margin-top: 6px; color: gray;">
+      RTC: checking...
+    </div>
+
     <script>
       function updateMem() {
         fetch('/mem', { cache: 'no-store' })
@@ -91,6 +95,7 @@ HTML_PAGE = b"""
             const s = document.getElementById("rec_status");
             const b = document.getElementById("rec_btn");
             const bt = document.getElementById("bt_status");
+            const rtc = document.getElementById("rtc_status");
 
             if (data.record_active) {
               s.innerText = "Recording active";
@@ -111,6 +116,17 @@ HTML_PAGE = b"""
             } else {
               bt.innerText = "Bluetooth remote searching...";
               bt.style.color = "orange";
+            }
+
+            if (!data.rtc || !data.rtc.present) {
+              rtc.innerText = "RTC module not detected";
+              rtc.style.color = "darkred";
+            } else if (data.rtc.time) {
+              rtc.innerText = "RTC time: " + data.rtc.time;
+              rtc.style.color = "green";
+            } else {
+              rtc.innerText = "RTC detected; time unavailable";
+              rtc.style.color = "orange";
             }
           });
       }

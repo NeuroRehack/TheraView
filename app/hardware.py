@@ -1,3 +1,5 @@
+import os
+import subprocess
 import threading
 import time
 
@@ -35,6 +37,29 @@ def remote_status():
             "available": InputDevice is not None,
             "connected": _remote_connected,
         }
+
+
+def rtc_status():
+    """Check RTC availability and current time (if readable)."""
+
+    rtc_device = None
+    for candidate in ("/dev/rtc", "/dev/rtc0"):
+        if os.path.exists(candidate):
+            rtc_device = candidate
+            break
+
+    if rtc_device is None:
+        return {"present": False, "time": None}
+
+    try:
+        output = subprocess.check_output(["hwclock", "-r"], text=True, stderr=subprocess.STDOUT)
+        timestamp = output.strip()
+        if timestamp:
+            return {"present": True, "time": timestamp}
+    except Exception as exc:  # pragma: no cover - hardware specific
+        print(f"RTC detected at {rtc_device} but failed to read time: {exc}")
+
+    return {"present": True, "time": None}
 
 
 class LedIndicator:
