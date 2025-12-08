@@ -13,10 +13,6 @@ HTML_PAGE = b"""
       Recording active
     </div>
 
-    <div id="bt_status" style="font-size: 18px; margin-top: 4px; color: gray;">
-      Bluetooth: checking...
-    </div>
-
     <div id="file_name" style="font-size: 22px; margin-top: 8px; color: black;">
     </div>
 
@@ -54,6 +50,10 @@ HTML_PAGE = b"""
     <br><br>
 
     <div id="mem_status" style="font-size: 20px; margin-top: 8px; color: gray;">
+    </div>
+
+    <div id="bt_status" style="font-size: 18px; margin-top: 6px; color: gray;">
+      Bluetooth: checking...
     </div>
 
     <script>
