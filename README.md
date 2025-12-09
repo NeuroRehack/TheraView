@@ -109,6 +109,8 @@ Running the server as `root` or a user with GPIO permissions is required for the
 
 Set `AUTO_START_RECORDING` to `true` to begin recording as soon as the app launches. Set it to `false` to start in preview-only mode and wait for the web UI or Bluetooth remote to toggle recording.
 
+Recorded clips now include a time-of-day overlay for easier provenance, and the controller auto-recovers the preview pipeline if a recording unexpectedly stops. When recordings end, the app flushes the last file to disk to reduce the chance of corruption.
+
 ### Optional RTC module
 Enable the DS3231 overlay (for example by adding `dtoverlay=i2c-rtc,ds3231` to `/boot/firmware/config.txt`). When an RTC is present, the web UI shows the current RTC time beneath the Bluetooth status.
 

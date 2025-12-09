@@ -8,15 +8,10 @@ import socketserver
 from .ui import HTML_PAGE
 from .core import get_network_ip, get_free_space_gb, PORT
 from .hardware import remote_status, rtc_status
-from .control import (
-    proc_lock, current_pipe, stop_pipelines, active_record, current_filename,
-    toggle_recording,
-)
+from . import control
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        global active_record
-
         if self.path == "/":
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
@@ -29,7 +24,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             status = {
-                "record_active": active_record,
+                **control.status_snapshot(),
                 **remote_status(),
                 "rtc": rtc_status(),
             }
@@ -37,7 +32,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
 
         if self.path == "/toggle_record":
-            toggle_recording()
+            control.toggle_recording()
             self._simple(b"ok")
             return
 
@@ -47,8 +42,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
 
             while True:
-                with proc_lock:
-                    proc = current_pipe()
+                with control.proc_lock:
+                    proc = control.current_pipe()
 
                 if proc is None:
                     time.sleep(0.05)
@@ -70,8 +65,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return
 
         if self.path == "/exit":
-            with proc_lock:
-                stop_pipelines()
+            with control.proc_lock:
+                control.stop_pipelines()
             self._simple(b"Exiting")
 
             def stop_server():
@@ -93,7 +88,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"name": current_filename}).encode("utf8"))
+            self.wfile.write(json.dumps({"name": control.status_snapshot()["filename"]}).encode("utf8"))
             return
 
         self.send_error(404)

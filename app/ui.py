@@ -97,14 +97,19 @@ HTML_PAGE = b"""
             const bt = document.getElementById("bt_status");
             const rtc = document.getElementById("rtc_status");
 
-            if (data.record_active) {
+            const recordingHealthy = data.record_active && data.record_running !== false;
+            const recovering = data.record_active && data.record_running === false;
+
+            if (recordingHealthy) {
               s.innerText = "Recording active";
               s.style.color = "red";
               b.innerText = "Stop recording";
+              b.disabled = false;
             } else {
-              s.innerText = "Recording off";
-              s.style.color = "gray";
-              b.innerText = "Start recording";
+              s.innerText = recovering ? "Recording recovering..." : "Recording off";
+              s.style.color = recovering ? "orange" : "gray";
+              b.innerText = recovering ? "Recovering" : "Start recording";
+              b.disabled = recovering;
             }
 
             if (!data.available) {
