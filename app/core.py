@@ -50,6 +50,9 @@ RECORD_BITRATE = cfg_int("RECORD_BITRATE", 8000)
 
 ENABLE_SYSTEMD = cfg_bool("ENABLE_SYSTEMD", True)
 ENABLE_HOTSPOT = cfg_bool("ENABLE_HOTSPOT", True)
+LED_PIN = cfg_int("LED_PIN", 21)
+AUTO_START_RECORDING = cfg_bool("AUTO_START_RECORDING", True)
+SELFIE_DEVICE_PATH = cfg_str("SELFIE_DEVICE_PATH", "")
 
 hostname = socket.gethostname().lower()
 

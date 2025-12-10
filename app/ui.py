@@ -52,6 +52,14 @@ HTML_PAGE = b"""
     <div id="mem_status" style="font-size: 20px; margin-top: 8px; color: gray;">
     </div>
 
+    <div id="bt_status" style="font-size: 18px; margin-top: 6px; color: gray;">
+      Bluetooth: checking...
+    </div>
+
+    <div id="rtc_status" style="font-size: 18px; margin-top: 6px; color: gray;">
+      RTC: checking...
+    </div>
+
     <script>
       function updateMem() {
         fetch('/mem', { cache: 'no-store' })
@@ -86,15 +94,44 @@ HTML_PAGE = b"""
           .then(data => {
             const s = document.getElementById("rec_status");
             const b = document.getElementById("rec_btn");
+            const bt = document.getElementById("bt_status");
+            const rtc = document.getElementById("rtc_status");
 
-            if (data.record_active) {
+            const recordingHealthy = data.record_active && data.record_running !== false;
+            const recovering = data.record_active && data.record_running === false;
+
+            if (recordingHealthy) {
               s.innerText = "Recording active";
               s.style.color = "red";
               b.innerText = "Stop recording";
+              b.disabled = false;
             } else {
-              s.innerText = "Recording off";
-              s.style.color = "gray";
-              b.innerText = "Start recording";
+              s.innerText = recovering ? "Recording recovering..." : "Recording off";
+              s.style.color = recovering ? "orange" : "gray";
+              b.innerText = recovering ? "Recovering" : "Start recording";
+              b.disabled = recovering;
+            }
+
+            if (!data.available) {
+              bt.innerText = "Bluetooth remote not available";
+              bt.style.color = "darkred";
+            } else if (data.connected) {
+              bt.innerText = "Bluetooth remote connected";
+              bt.style.color = "green";
+            } else {
+              bt.innerText = "Bluetooth remote searching...";
+              bt.style.color = "orange";
+            }
+
+            if (!data.rtc || !data.rtc.present) {
+              rtc.innerText = "RTC module not detected";
+              rtc.style.color = "darkred";
+            } else if (data.rtc.time) {
+              rtc.innerText = "RTC time: " + data.rtc.time;
+              rtc.style.color = "green";
+            } else {
+              rtc.innerText = "RTC detected; time unavailable";
+              rtc.style.color = "orange";
             }
           });
       }

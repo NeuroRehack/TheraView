@@ -92,6 +92,28 @@ sudo chmod +x scripts/setup.sh
 ./scripts/setup.sh
 ```
 
+### Pair the "Selfie" Bluetooth remote
+Run the pairing helper and press the button on the tripod Bluetooth module when prompted:
+
+```
+./scripts/setup_selfie.sh
+```
+
+The remote will appear as `Selfie` in Bluetooth scans. Once paired, pressing its button or the web UI button both start/stop recording.
+If your device enumerates the input node at a fixed path (for example `/dev/input/event4`), set `SELFIE_DEVICE_PATH` in `config.conf` so
+the listener can open it directly.
+
+### Recording status LED
+The recording status LED uses GPIO pin 21 by default. Change the pin assignment in `config.conf` under the `LED_PIN` setting if your wiring differs.
+Running the server as `root` or a user with GPIO permissions is required for the LED to toggle.
+
+Set `AUTO_START_RECORDING` to `true` to begin recording as soon as the app launches. Set it to `false` to start in preview-only mode and wait for the web UI or Bluetooth remote to toggle recording.
+
+Recorded clips now include a time-of-day overlay for easier provenance, and the controller auto-recovers the preview pipeline if a recording unexpectedly stops. When recordings end, the app flushes the last file to disk to reduce the chance of corruption.
+
+### Optional RTC module
+Enable the DS3231 overlay (for example by adding `dtoverlay=i2c-rtc,ds3231` to `/boot/firmware/config.txt`). When an RTC is present, the web UI shows the current RTC time beneath the Bluetooth status.
+
 Note: If you do not want the system to auto start on systemd or set up the hotspot, edit the config file at config/theraview.config and change these flags: ENABLE_SYSTEMD and ENABLE_HOTSPOT
 
 ---

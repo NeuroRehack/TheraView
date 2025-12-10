@@ -27,13 +27,15 @@ sudo apt upgrade -y
 echo "[2] Installing system packages..."
 sudo apt install -y \
     python3 python3-pip python3-venv python3-gst-1.0 \
+    python3-rpi.gpio python3-evdev \
     gstreamer1.0-tools \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-plugins-ugly \
     gstreamer1.0-libav \
-    network-manager
+    network-manager \
+    bluez bluetooth pi-bluetooth
 
 echo "[3] Creating Python virtual environment..."
 python3 -m venv venv
