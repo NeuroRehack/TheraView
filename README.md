@@ -28,9 +28,10 @@ TheraView is a portable two angle capture system for physical therapy and occupa
   - file name: 2024-07-04-raspios-bookworm-arm64-lite.img.xz 
   - Version: bookworm-arm64-lite
   - Release date: 2024-07-04
-- **GStreamer**  
+- **FFmpeg**
   - Version: [to be added]
-- To be completed
+  - Provides HLS preview/recording streams
+  - To be completed
 
 ---
 
@@ -122,6 +123,9 @@ Note: If you do not want the system to auto start on systemd or set up the hotsp
 ## Usage
 
 **[ instructions to be added]**
+
+- Start the server and open the web UI to view the HLS stream at `/stream`.
+- The live preview uses FFmpeg to generate HLS playlists and segments in the local `hls/` directory.
 
 
 

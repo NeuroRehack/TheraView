@@ -49,9 +49,8 @@ def start_preview_only():
     stop_pipelines()
     preview_proc = subprocess.Popen(
         preview_pipeline(),
-        stdout=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        bufsize=0,
     )
 
 def start_record_plus_preview():
@@ -62,9 +61,8 @@ def start_record_plus_preview():
     current_filename = os.path.join(OUTPUT_DIR, f"{BASENAME_PREFIX}{ts}.mp4")
     record_proc = subprocess.Popen(
         record_pipeline(current_filename),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        bufsize=0,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
 def stop_pipelines():
@@ -124,14 +122,6 @@ def set_recording_state(recording: bool):
 
 def toggle_recording():
     return set_recording_state(not active_record)
-
-def current_pipe():
-    if _proc_alive(record_proc):
-        return record_proc
-    if _proc_alive(preview_proc):
-        return preview_proc
-    return None
-
 
 def status_snapshot():
     """Return a thread-safe view of the pipeline state and heal obvious drifts."""

@@ -1,62 +1,172 @@
+import os
+import shutil
+
 from .core import (
-    DEVICE, RECORD_WIDTH, RECORD_HEIGHT, STREAM_WIDTH, STREAM_HEIGHT,
-    FRAMERATE, RECORD_BITRATE, STREAM_TEXT
+    DEVICE,
+    FRAMERATE,
+    HLS_LIST_SIZE,
+    HLS_SEGMENT_TIME,
+    RECORD_BITRATE,
+    RECORD_HEIGHT,
+    RECORD_WIDTH,
+    STREAM_BITRATE,
+    STREAM_HEIGHT,
+    STREAM_TEXT,
+    STREAM_WIDTH,
 )
 
-def preview_pipeline():
+FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+HLS_DIR = "hls"
+PREVIEW_PLAYLIST = os.path.join(HLS_DIR, "preview.m3u8")
+RECORD_PLAYLIST = os.path.join(HLS_DIR, "stream.m3u8")
+TIMESTAMP_EXPR = "%{localtime\\:%Y-%m-%d %H\\:%M\\:%S}"
+
+
+def _clean_hls_dir():
+    os.makedirs(HLS_DIR, exist_ok=True)
+    for name in os.listdir(HLS_DIR):
+        path = os.path.join(HLS_DIR, name)
+        try:
+            if os.path.isdir(path):
+                shutil.rmtree(path)
+            else:
+                os.remove(path)
+        except FileNotFoundError:
+            continue
+
+
+def _drawtext(text: str, x: str, y: str, size: int = 20):
+    safe_text = text.replace("'", "\\'")
+    return (
+        "drawtext=fontfile=%(font)s:"
+        "fontsize=%(size)d:"
+        "fontcolor=white:"
+        "text='%(text)s':"
+        "x=%(x)s:"
+        "y=%(y)s:"
+        "borderw=2:"
+        "bordercolor=black@0.6" % {"font": FONT_PATH, "size": size, "text": safe_text, "x": x, "y": y}
+    )
+
+
+def _overlay_chain(width: int, height: int, include_label: bool = True, include_clock: bool = True):
+    filters = [f"scale={width}:{height}"]
+    if include_label:
+        filters.append(_drawtext(STREAM_TEXT, "w-tw-10", "10", 22))
+    if include_clock:
+        filters.append(_drawtext(TIMESTAMP_EXPR, "w-tw-10", "h-th-10", 24))
+    return ",".join(filters)
+
+
+def _common_input():
     return [
-        "gst-launch-1.0", "-e", "-q",
-        "v4l2src", f"device={DEVICE}", "io-mode=dmabuf",
-        "!", f"image/jpeg,width={RECORD_WIDTH},height={RECORD_HEIGHT},framerate={FRAMERATE}/1",
-        "!", "jpegdec",
-        "!", "videoscale",
-        "!", f"video/x-raw,width={STREAM_WIDTH},height={STREAM_HEIGHT},framerate={FRAMERATE}/1",
-        "!", "videoconvert",
-        "!", "clockoverlay", "font-desc=Sans 16", "halignment=right", "valignment=bottom",
-        "draw-outline=true", "color=0xFFFFFFFF", "outline-color=0xFF000000",
-        "!", "textoverlay", f"text={STREAM_TEXT}", "valignment=top", "halignment=right",
-        "font-desc=Sans, 16", "draw-outline=true", "color=0xFFFFFFFF", "outline-color=0xFF000000",
-        "!", "jpegenc",
-        "!", "multipartmux", "boundary=frame",
-        "!", "filesink", "location=/dev/stdout",
+        "ffmpeg",
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-f",
+        "v4l2",
+        "-framerate",
+        str(FRAMERATE),
+        "-video_size",
+        f"{RECORD_WIDTH}x{RECORD_HEIGHT}",
+        "-i",
+        DEVICE,
     ]
 
 
-from .core import BASENAME_PREFIX
+def preview_pipeline():
+    _clean_hls_dir()
+    return _common_input() + [
+        "-vf",
+        _overlay_chain(STREAM_WIDTH, STREAM_HEIGHT),
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-tune",
+        "zerolatency",
+        "-g",
+        str(FRAMERATE),
+        "-keyint_min",
+        str(FRAMERATE),
+        "-pix_fmt",
+        "yuv420p",
+        "-f",
+        "hls",
+        "-hls_time",
+        str(HLS_SEGMENT_TIME),
+        "-hls_list_size",
+        str(HLS_LIST_SIZE),
+        "-hls_flags",
+        "delete_segments+append_list",
+        "-hls_segment_filename",
+        os.path.join(HLS_DIR, "preview_%03d.ts"),
+        PREVIEW_PLAYLIST,
+    ]
+
 
 def record_pipeline(filename):
-    return [
-        "gst-launch-1.0", "-e", "-q",
-        "v4l2src", f"device={DEVICE}", "io-mode=dmabuf",
-        "!", f"image/jpeg,width={RECORD_WIDTH},height={RECORD_HEIGHT},framerate={FRAMERATE}/1",
-        "!", "jpegdec",
-        "!", "videoconvert",
-        "!", "clockoverlay", "time-format=%Y-%m-%d %H:%M:%S", "font-desc=Sans 18",
-        "halignment=right", "valignment=bottom", "draw-outline=true", "color=0xFFFFFFFF",
-        "outline-color=0xFF000000",
-        "!", "videoconvert",
-        "!", "tee", "name=t",
+    _clean_hls_dir()
+    record_filters = _overlay_chain(RECORD_WIDTH, RECORD_HEIGHT, include_label=False)
+    stream_filters = _overlay_chain(STREAM_WIDTH, STREAM_HEIGHT)
+    filter_graph = f"[0:v]{record_filters}[record];[0:v]{stream_filters}[stream]"
 
-        "t.", "!", "queue",
-        "!", "videoconvert",
-        "!", "x264enc",
-        f"bitrate={RECORD_BITRATE}",
-        "speed-preset=ultrafast",
-        "tune=zerolatency",
-        f"key-int-max={FRAMERATE}",
-        "!", "h264parse",
-        "!", "mp4mux", "faststart=true",
-        "!", "filesink", f"location={filename}",
-
-        "t.", "!", "queue",
-        "!", "videoscale",
-        "!", f"video/x-raw,width={STREAM_WIDTH},height={STREAM_HEIGHT},framerate={FRAMERATE}/1",
-        "!", "videoconvert",
-        "!", "timeoverlay", "font-desc=Sans 16", "halignment=left", "valignment=bottom", "color=0xFFFF0000",
-        "!", "textoverlay", f"text={STREAM_TEXT}", "valignment=top", "halignment=right",
-        "font-desc=Sans, 16", "draw-outline=true", "color=0xFFFFFFFF",
-        "outline-color=0xFF000000",
-        "!", "jpegenc",
-        "!", "multipartmux", "boundary=frame",
-        "!", "filesink", "location=/dev/stdout",
+    return _common_input() + [
+        "-filter_complex",
+        filter_graph,
+        "-map",
+        "[record]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-tune",
+        "zerolatency",
+        "-b:v",
+        f"{RECORD_BITRATE}k",
+        "-g",
+        str(FRAMERATE),
+        "-keyint_min",
+        str(FRAMERATE),
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        filename,
+        "-map",
+        "[stream]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-tune",
+        "zerolatency",
+        "-b:v",
+        f"{STREAM_BITRATE}k",
+        "-g",
+        str(FRAMERATE),
+        "-keyint_min",
+        str(FRAMERATE),
+        "-pix_fmt",
+        "yuv420p",
+        "-f",
+        "hls",
+        "-hls_time",
+        str(HLS_SEGMENT_TIME),
+        "-hls_list_size",
+        str(HLS_LIST_SIZE),
+        "-hls_flags",
+        "delete_segments+append_list",
+        "-hls_segment_filename",
+        os.path.join(HLS_DIR, "stream_%03d.ts"),
+        RECORD_PLAYLIST,
     ]
+
+
+def current_playlist(recording_active: bool):
+    if recording_active and os.path.isfile(RECORD_PLAYLIST):
+        return RECORD_PLAYLIST
+    return PREVIEW_PLAYLIST if os.path.isfile(PREVIEW_PLAYLIST) else None

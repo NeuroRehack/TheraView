@@ -9,6 +9,7 @@ from .ui import HTML_PAGE
 from .core import get_network_ip, get_free_space_gb, PORT
 from .hardware import remote_status, rtc_status
 from . import control
+from . import video
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -36,33 +37,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._simple(b"ok")
             return
 
-        if self.path == "/stream":
-            self.send_response(200)
-            self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")
-            self.end_headers()
+        if self.path.startswith("/stream"):
+            target = self._resolve_stream_path()
+            if not target or not os.path.isfile(target):
+                self.send_error(404)
+                return
 
-            while True:
-                with control.proc_lock:
-                    proc = control.current_pipe()
+            if target.endswith(".m3u8"):
+                content_type = "application/vnd.apple.mpegurl"
+            else:
+                content_type = "video/MP2T"
 
-                if proc is None:
-                    time.sleep(0.05)
-                    continue
-
-                try:
-                    chunk = proc.stdout.read(4096)
-                except:
-                    time.sleep(0.02)
-                    continue
-
-                if not chunk:
-                    time.sleep(0.02)
-                    continue
-
-                try:
-                    self.wfile.write(chunk)
-                except BrokenPipeError:
-                    return
+            try:
+                with open(target, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(data)
+            except FileNotFoundError:
+                self.send_error(404)
+            return
 
         if self.path == "/exit":
             with control.proc_lock:
@@ -98,3 +94,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
         self.wfile.write(msg)
+
+    def _resolve_stream_path(self):
+        if self.path in {"/stream", "/stream/"}:
+            status = control.status_snapshot()
+            playlist = video.current_playlist(status.get("record_active", False))
+            return playlist
+
+        relpath = self.path[len("/stream/") :]
+        if ".." in relpath.split("/"):
+            return None
+        return os.path.join(video.HLS_DIR, relpath)

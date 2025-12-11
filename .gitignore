@@ -147,6 +147,7 @@ venv.bak/
 # Recordings folder and video files
 
 recordings/
+hls/
 
 *.mp4
 *.avi

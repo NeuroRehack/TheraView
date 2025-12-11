@@ -3,8 +3,11 @@ HTML_PAGE = b"""
   <body style="font-family: sans-serif; margin: 0; padding: 0; text-align: center;">
 
     <div style="margin-top: 20px;">
-      <img src="/stream" width="640" height="480"
+      <video id="stream" width="640" height="480" controls autoplay muted playsinline
         style="object-fit: cover; border: 2px solid black; max-width: 95vw; height: auto;">
+        <source src="/stream" type="application/vnd.apple.mpegurl">
+        Your browser does not support HLS playback.
+      </video>
     </div>
 
     <br>
