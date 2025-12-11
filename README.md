@@ -88,8 +88,8 @@ sudo apt install git -y
 
 git clone https://github.com/NeuroRehack/TheraView
 cd TheraView
-sudo chmod +x scripts/setup.sh 
-./scripts/setup.sh
+sudo chmod +x ./setup.sh 
+./setup.sh
 ```
 
 ### Pair the "Selfie" Bluetooth remote
