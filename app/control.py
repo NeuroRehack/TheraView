@@ -1,8 +1,10 @@
 import os
+import re
 import signal
 import subprocess
 import threading
 import datetime
+import time
 
 from .video import preview_pipeline, record_pipeline
 from .core import OUTPUT_DIR, BASENAME_PREFIX
@@ -14,7 +16,10 @@ proc_lock = threading.Lock()
 preview_proc = None
 record_proc = None
 active_record = False
+record_restart_at = 0.0
 current_filename = ""
+preview_fps = None
+record_fps = None
 
 
 def set_led_controller(controller):
@@ -44,15 +49,56 @@ def _flush_record_file():
     except Exception as exc:  # pragma: no cover - best effort
         print(f"Failed to fsync {current_filename}: {exc}")
 
+
+def _monitor_fps(proc, key):
+    global preview_fps, record_fps
+
+    while True:
+        line = proc.stderr.readline()
+        if not line:
+            break
+
+        try:
+            text = line.decode("utf-8", errors="ignore")
+        except AttributeError:
+            text = str(line)
+
+        match = re.search(r"fps:\s*([0-9.]+)", text)
+        if not match:
+            match = re.search(r"current:\s*([0-9.]+)", text)
+
+        if match:
+            try:
+                value = float(match.group(1))
+            except ValueError:
+                continue
+            with proc_lock:
+                if key == "preview":
+                    preview_fps = value
+                else:
+                    record_fps = value
+
+    with proc_lock:
+        if key == "preview":
+            preview_fps = None
+        else:
+            record_fps = None
+
+
+def _start_monitor_thread(proc, key):
+    thread = threading.Thread(target=_monitor_fps, args=(proc, key), daemon=True)
+    thread.start()
+
 def start_preview_only():
     global preview_proc
     stop_pipelines()
     preview_proc = subprocess.Popen(
         preview_pipeline(),
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         bufsize=0,
     )
+    _start_monitor_thread(preview_proc, "preview")
 
 def start_record_plus_preview():
     global record_proc, current_filename
@@ -66,6 +112,7 @@ def start_record_plus_preview():
         stderr=subprocess.PIPE,
         bufsize=0,
     )
+    _start_monitor_thread(record_proc, "record")
 
 def stop_pipelines():
     global preview_proc, record_proc
@@ -97,29 +144,28 @@ def stop_pipelines():
 
 
 def set_recording_state(recording: bool):
-    global active_record
+    global active_record, record_restart_at
     with proc_lock:
-        if recording == active_record:
-            if recording and not _proc_alive(record_proc):
-                start_record_plus_preview()
-            elif not recording and not _proc_alive(preview_proc):
-                start_preview_only()
-            active_record = recording and _proc_alive(record_proc)
+        active_record = recording
+
+        if recording and _proc_alive(record_proc):
             _update_led()
-            return active_record
+            return True
+
+        record_restart_at = 0.0
 
         if recording:
             start_record_plus_preview()
-            active_record = _proc_alive(record_proc)
-            if not active_record:
+            record_alive = _proc_alive(record_proc)
+            if not record_alive:
                 print("Recording failed to start; staying in preview mode.")
                 start_preview_only()
+            _update_led()
+            return record_alive
         else:
             start_preview_only()
-            active_record = False
-
-        _update_led()
-        return active_record
+            _update_led()
+            return False
 
 
 def toggle_recording():
@@ -136,25 +182,31 @@ def current_pipe():
 def status_snapshot():
     """Return a thread-safe view of the pipeline state and heal obvious drifts."""
 
-    global active_record, record_proc, preview_proc
+    global active_record, record_proc, preview_proc, record_restart_at
 
     with proc_lock:
         record_alive = _proc_alive(record_proc)
         preview_alive = _proc_alive(preview_proc)
 
-        # If the record pipeline died unexpectedly, drop back to preview to keep serving.
-        if active_record and not record_alive:
-            print("Recording pipeline stopped unexpectedly; switching to preview.")
-            active_record = False
-            record_proc = None
+        if active_record:
+            if not record_alive:
+                now = time.time()
+                if now - record_restart_at >= 2.0:
+                    print("Recording pipeline stopped unexpectedly; attempting restart.")
+                    record_restart_at = now
+                    start_record_plus_preview()
+                    record_alive = _proc_alive(record_proc)
+
+                if not record_alive and not preview_alive:
+                    start_preview_only()
+                    preview_alive = _proc_alive(preview_proc)
+        else:
+            if record_alive:
+                stop_pipelines()
+                record_alive = False
             if not preview_alive:
                 start_preview_only()
                 preview_alive = _proc_alive(preview_proc)
-
-        # If neither pipeline is alive (e.g., after a crash), bring preview back up.
-        if not active_record and not preview_alive:
-            start_preview_only()
-            preview_alive = _proc_alive(preview_proc)
 
         _update_led()
 
@@ -163,4 +215,6 @@ def status_snapshot():
             "record_running": record_alive,
             "preview_running": preview_alive,
             "filename": current_filename,
+            "preview_fps": preview_fps,
+            "record_fps": record_fps,
         }
