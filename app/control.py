@@ -1,4 +1,5 @@
 import os
+import re
 import signal
 import subprocess
 import threading
@@ -15,6 +16,8 @@ preview_proc = None
 record_proc = None
 active_record = False
 current_filename = ""
+preview_fps = None
+record_fps = None
 
 
 def set_led_controller(controller):
@@ -44,15 +47,56 @@ def _flush_record_file():
     except Exception as exc:  # pragma: no cover - best effort
         print(f"Failed to fsync {current_filename}: {exc}")
 
+
+def _monitor_fps(proc, key):
+    global preview_fps, record_fps
+
+    while True:
+        line = proc.stderr.readline()
+        if not line:
+            break
+
+        try:
+            text = line.decode("utf-8", errors="ignore")
+        except AttributeError:
+            text = str(line)
+
+        match = re.search(r"fps:\s*([0-9.]+)", text)
+        if not match:
+            match = re.search(r"current:\s*([0-9.]+)", text)
+
+        if match:
+            try:
+                value = float(match.group(1))
+            except ValueError:
+                continue
+            with proc_lock:
+                if key == "preview":
+                    preview_fps = value
+                else:
+                    record_fps = value
+
+    with proc_lock:
+        if key == "preview":
+            preview_fps = None
+        else:
+            record_fps = None
+
+
+def _start_monitor_thread(proc, key):
+    thread = threading.Thread(target=_monitor_fps, args=(proc, key), daemon=True)
+    thread.start()
+
 def start_preview_only():
     global preview_proc
     stop_pipelines()
     preview_proc = subprocess.Popen(
         preview_pipeline(),
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         bufsize=0,
     )
+    _start_monitor_thread(preview_proc, "preview")
 
 def start_record_plus_preview():
     global record_proc, current_filename
@@ -66,6 +110,7 @@ def start_record_plus_preview():
         stderr=subprocess.PIPE,
         bufsize=0,
     )
+    _start_monitor_thread(record_proc, "record")
 
 def stop_pipelines():
     global preview_proc, record_proc
@@ -163,4 +208,6 @@ def status_snapshot():
             "record_running": record_alive,
             "preview_running": preview_alive,
             "filename": current_filename,
+            "preview_fps": preview_fps,
+            "record_fps": record_fps,
         }
