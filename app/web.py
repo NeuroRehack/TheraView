@@ -36,6 +36,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._simple(b"ok")
             return
 
+        if self.path == "/toggle_video":
+            control.toggle_pipelines()
+            self._simple(b"ok")
+            return
+
         if self.path == "/stream":
             self.send_response(200)
             self.send_header("Content-Type", "multipart/x-mixed-replace; boundary=frame")

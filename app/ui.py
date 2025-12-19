@@ -130,6 +130,7 @@ HTML_PAGE = b"""<!DOCTYPE html>
       #rec_btn.recovering { background: linear-gradient(135deg, #f59e0b, #d97706); }
       #rec_btn.off { background: linear-gradient(135deg, #10b981, #059669); }
       #exit_btn { background: linear-gradient(135deg, #4b5563, #1f2937); }
+      #video_btn { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
 
       .status-grid {
         display: grid;
@@ -193,6 +194,7 @@ HTML_PAGE = b"""<!DOCTYPE html>
 
         <div class=\"card controls\">
           <button id=\"rec_btn\" onclick=\"toggleRecord()\">Stop recording</button>
+          <button id=\"video_btn\" onclick=\"toggleVideo()\">Stop video system</button>
           <button id=\"exit_btn\" onclick=\"exitServer()\">Exit</button>
 
           <div class=\"status-grid\">
@@ -212,13 +214,17 @@ HTML_PAGE = b"""<!DOCTYPE html>
               <div class=\"label\">RTC Module</div>
               <div id=\"rtc_status\" class=\"value\">Checking...</div>
             </div>
+            <div class=\"status-item\">
+              <div class=\"label\">Video System</div>
+              <div id=\"video_state\" class=\"value\">Starting...</div>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
     <script>
-      function setRecordingState(recordingHealthy, recovering) {
+      function setRecordingState(recordingHealthy, recovering, controlsDisabled = false) {
         const pill = document.getElementById('rec_status');
         const text = pill.querySelector('.record-text');
         const btn = document.getElementById('rec_btn');
@@ -249,7 +255,24 @@ HTML_PAGE = b"""<!DOCTYPE html>
           pill.style.borderColor = 'rgba(16, 185, 129, 0.25)';
         }
 
-        btn.disabled = recovering;
+        btn.disabled = recovering || controlsDisabled;
+      }
+
+      function setVideoState(enabled) {
+        const videoBtn = document.getElementById('video_btn');
+        const recBtn = document.getElementById('rec_btn');
+
+        if (enabled) {
+          setValue('video_state', 'Running', 'green');
+          videoBtn.textContent = 'Stop video system';
+          videoBtn.disabled = false;
+          recBtn.disabled = recBtn.classList.contains('recovering');
+        } else {
+          setValue('video_state', 'Stopped', 'red');
+          videoBtn.textContent = 'Start video system';
+          videoBtn.disabled = false;
+          recBtn.disabled = true;
+        }
       }
 
       function setValue(id, value, colorClass) {
@@ -283,14 +306,28 @@ HTML_PAGE = b"""<!DOCTYPE html>
           .then(() => setTimeout(updateStatus, 250));
       }
 
+      function toggleVideo() {
+        fetch('/toggle_video', { cache: 'no-store' })
+          .then(() => setTimeout(updateStatus, 250));
+      }
+
       function updateStatus() {
         fetch('/status', { cache: 'no-store' })
           .then(r => r.json())
           .then(data => {
-            const recordingHealthy = data.record_active && data.record_running !== false;
-            const recovering = data.record_active && data.record_running === false;
+            const videoEnabled = data.pipelines_enabled !== false;
+            setVideoState(videoEnabled);
 
-            setRecordingState(recordingHealthy, recovering);
+            if (!videoEnabled) {
+              setRecordingState(false, false, true);
+              setValue('record_fps', '--', 'red');
+              setValue('preview_fps', '--', 'red');
+            }
+
+            const recordingHealthy = videoEnabled && data.record_active && data.record_running !== false;
+            const recovering = videoEnabled && data.record_active && data.record_running === false;
+
+            setRecordingState(recordingHealthy, recovering, !videoEnabled);
 
             if (!data.available) {
               setValue('bt_status', 'Bluetooth remote not available', 'red');
@@ -308,16 +345,16 @@ HTML_PAGE = b"""<!DOCTYPE html>
               setValue('rtc_status', 'RTC detected; time unavailable', 'orange');
             }
 
-            if (data.record_fps !== null && data.record_fps !== undefined) {
+            if (videoEnabled && data.record_fps !== null && data.record_fps !== undefined) {
               setValue('record_fps', data.record_fps.toFixed(1) + ' fps');
             } else {
-              setValue('record_fps', '--', 'orange');
+              setValue('record_fps', '--', videoEnabled ? 'orange' : 'red');
             }
 
-            if (data.preview_fps !== null && data.preview_fps !== undefined) {
+            if (videoEnabled && data.preview_fps !== null && data.preview_fps !== undefined) {
               setValue('preview_fps', data.preview_fps.toFixed(1) + ' fps');
             } else {
-              setValue('preview_fps', '--', 'orange');
+              setValue('preview_fps', '--', videoEnabled ? 'orange' : 'red');
             }
           });
       }

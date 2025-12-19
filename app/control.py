@@ -15,6 +15,7 @@ led_controller = None
 proc_lock = threading.Lock()
 preview_proc = None
 record_proc = None
+pipelines_enabled = True
 active_record = False
 record_restart_at = 0.0
 current_filename = ""
@@ -30,7 +31,7 @@ def set_led_controller(controller):
 
 def _update_led():
     if led_controller:
-        led_controller.set(active_record)
+        led_controller.set(active_record and pipelines_enabled and _proc_alive(record_proc))
 
 
 def _proc_alive(proc):
@@ -147,12 +148,15 @@ def set_recording_state(recording: bool):
     global active_record, record_restart_at
     with proc_lock:
         active_record = recording
+        record_restart_at = 0.0
+
+        if not pipelines_enabled:
+            _update_led()
+            return False
 
         if recording and _proc_alive(record_proc):
             _update_led()
             return True
-
-        record_restart_at = 0.0
 
         if recording:
             start_record_plus_preview()
@@ -171,6 +175,36 @@ def set_recording_state(recording: bool):
 def toggle_recording():
     return set_recording_state(not active_record)
 
+
+def set_pipelines_enabled(enabled: bool):
+    global pipelines_enabled, record_restart_at
+    with proc_lock:
+        if pipelines_enabled == enabled:
+            return pipelines_enabled
+
+        pipelines_enabled = enabled
+        record_restart_at = 0.0
+
+        if not enabled:
+            stop_pipelines()
+            _update_led()
+            return False
+
+        if active_record:
+            start_record_plus_preview()
+            if not _proc_alive(record_proc):
+                print("Recording failed to start; staying in preview mode.")
+                start_preview_only()
+        else:
+            start_preview_only()
+
+        _update_led()
+        return True
+
+
+def toggle_pipelines():
+    return set_pipelines_enabled(not pipelines_enabled)
+
 def current_pipe():
     if _proc_alive(record_proc):
         return record_proc
@@ -187,6 +221,22 @@ def status_snapshot():
     with proc_lock:
         record_alive = _proc_alive(record_proc)
         preview_alive = _proc_alive(preview_proc)
+
+        if not pipelines_enabled:
+            if record_alive or preview_alive:
+                stop_pipelines()
+            record_alive = False
+            preview_alive = False
+            _update_led()
+            return {
+                "record_active": active_record,
+                "record_running": record_alive,
+                "preview_running": preview_alive,
+                "filename": current_filename,
+                "preview_fps": preview_fps,
+                "record_fps": record_fps,
+                "pipelines_enabled": pipelines_enabled,
+            }
 
         if active_record:
             if not record_alive:
@@ -217,4 +267,5 @@ def status_snapshot():
             "filename": current_filename,
             "preview_fps": preview_fps,
             "record_fps": record_fps,
+            "pipelines_enabled": pipelines_enabled,
         }
