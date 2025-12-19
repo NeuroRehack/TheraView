@@ -1,73 +1,268 @@
-HTML_PAGE = b"""
-<html>
-  <body style="font-family: sans-serif; margin: 0; padding: 0; text-align: center;">
+HTML_PAGE = b"""<!DOCTYPE html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"UTF-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+    <title>TheraView Control</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #111827;
+        --card: #1f2937;
+        --accent: #10b981;
+        --warn: #f59e0b;
+        --danger: #ef4444;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+      }
 
-    <div style="margin-top: 20px;">
-      <img src="/stream" width="640" height="480"
-        style="object-fit: cover; border: 2px solid black; max-width: 95vw; height: auto;">
-    </div>
+      * { box-sizing: border-box; }
 
-    <br>
+      body {
+        margin: 0;
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: radial-gradient(circle at 20% 20%, #1e293b 0, #0f172a 45%),
+                    radial-gradient(circle at 80% 0%, #111827 0, #0f172a 40%);
+        color: var(--text);
+        min-height: 100vh;
+      }
 
-    <div id="rec_status" style="font-size: 28px; font-weight: bold; color: red;">
-      Recording active
-    </div>
+      .page {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 24px 18px 40px;
+      }
 
-    <div id="file_name" style="font-size: 22px; margin-top: 8px; color: black;">
-    </div>
-
-    <br>
-
-    <button id="rec_btn"
-      style="
-        font-size: 34px;
-        padding: 24px 50px;
-        width: 80vw;
-        max-width: 420px;
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 18px;
+        background: var(--panel);
+        border: 1px solid #1f2937;
         border-radius: 14px;
-      "
-      onclick="toggleRecord()">
-      Stop recording
-    </button>
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.35);
+      }
 
-    <br><br>
+      .title {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
 
-    <button
-      onclick="exitServer()"
-      style="
-        font-size: 30px;
-        padding: 20px 45px;
-        width: 75vw;
-        max-width: 380px;
+      .title h1 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0.2px;
+      }
+
+      .title span {
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .record-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 16px;
+        border-radius: 999px;
+        background: rgba(239, 68, 68, 0.12);
+        color: var(--danger);
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        border: 1px solid rgba(239, 68, 68, 0.25);
+      }
+
+      .record-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--danger);
+        box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 18px;
+        margin-top: 18px;
+      }
+
+      .card {
+        background: var(--card);
         border-radius: 14px;
-        background-color: #333;
+        border: 1px solid #1f2937;
+        padding: 16px;
+        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+      }
+
+      .preview img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid #111827;
+        object-fit: cover;
+        background: black;
+      }
+
+      .controls {
+        display: grid;
+        gap: 12px;
+      }
+
+      button {
+        font-size: 18px;
+        padding: 15px 18px;
+        border-radius: 12px;
+        border: none;
+        font-weight: 700;
         color: white;
-      "
-    >
-      Exit
-    </button>
+        cursor: pointer;
+        transition: transform 120ms ease, opacity 120ms ease;
+      }
 
-    <br><br>
+      button:active { transform: translateY(1px); }
+      button:disabled { opacity: 0.6; cursor: not-allowed; }
 
-    <div id="mem_status" style="font-size: 20px; margin-top: 8px; color: gray;">
-    </div>
+      #rec_btn { background: linear-gradient(135deg, #ef4444, #dc2626); }
+      #rec_btn.recovering { background: linear-gradient(135deg, #f59e0b, #d97706); }
+      #rec_btn.off { background: linear-gradient(135deg, #10b981, #059669); }
+      #exit_btn { background: linear-gradient(135deg, #4b5563, #1f2937); }
 
-    <div id="bt_status" style="font-size: 18px; margin-top: 6px; color: gray;">
-      Bluetooth: checking...
-    </div>
+      .status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+        margin-top: 8px;
+      }
 
-    <div id="rtc_status" style="font-size: 18px; margin-top: 6px; color: gray;">
-      RTC: checking...
+      .status-item {
+        padding: 12px 14px;
+        border-radius: 12px;
+        background: #111827;
+        border: 1px solid #1f2937;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .label { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 0.4px; }
+      .value { font-size: 18px; font-weight: 700; }
+
+      .value.green { color: var(--accent); }
+      .value.orange { color: var(--warn); }
+      .value.red { color: var(--danger); }
+
+      @media (max-width: 900px) {
+        .grid { grid-template-columns: 1fr; }
+        header { flex-direction: column; align-items: flex-start; }
+        .record-pill { align-self: flex-start; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class=\"page\">
+      <header>
+        <div class=\"title\">
+          <h1>TheraView Control</h1>
+          <span>Monitor capture, recording, and device health</span>
+        </div>
+        <div id=\"rec_status\" class=\"record-pill\">
+          <span class=\"record-dot\"></span>
+          <span class=\"record-text\">Recording active</span>
+        </div>
+      </header>
+
+      <div class=\"grid\">
+        <div class=\"card preview\">
+          <div class=\"label\">Live Preview</div>
+          <img src=\"/stream\" alt=\"Live preview\" width=\"640\" height=\"480\">
+          <div class=\"status-grid\" style=\"margin-top: 12px;\">
+            <div class=\"status-item\">
+              <div class=\"label\">Recording FPS</div>
+              <div id=\"record_fps\" class=\"value\">--</div>
+            </div>
+            <div class=\"status-item\">
+              <div class=\"label\">Preview FPS</div>
+              <div id=\"preview_fps\" class=\"value\">--</div>
+            </div>
+          </div>
+        </div>
+
+        <div class=\"card controls\">
+          <button id=\"rec_btn\" onclick=\"toggleRecord()\">Stop recording</button>
+          <button id=\"exit_btn\" onclick=\"exitServer()\">Exit</button>
+
+          <div class=\"status-grid\">
+            <div class=\"status-item\">
+              <div class=\"label\">Current File</div>
+              <div id=\"file_name\" class=\"value\">--</div>
+            </div>
+            <div class=\"status-item\">
+              <div class=\"label\">Storage</div>
+              <div id=\"mem_status\" class=\"value\">--</div>
+            </div>
+            <div class=\"status-item\">
+              <div class=\"label\">Bluetooth Remote</div>
+              <div id=\"bt_status\" class=\"value\">Checking...</div>
+            </div>
+            <div class=\"status-item\">
+              <div class=\"label\">RTC Module</div>
+              <div id=\"rtc_status\" class=\"value\">Checking...</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <script>
+      function setRecordingState(recordingHealthy, recovering) {
+        const pill = document.getElementById('rec_status');
+        const text = pill.querySelector('.record-text');
+        const btn = document.getElementById('rec_btn');
+
+        pill.classList.remove('warn', 'off');
+
+        if (recordingHealthy) {
+          text.textContent = 'Recording active';
+          btn.textContent = 'Stop recording';
+          btn.classList.remove('recovering', 'off');
+          pill.style.background = 'rgba(239, 68, 68, 0.12)';
+          pill.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+        } else if (recovering) {
+          text.textContent = 'Recording recovering...';
+          btn.textContent = 'Recovering';
+          btn.classList.add('recovering');
+          btn.classList.remove('off');
+          btn.disabled = true;
+          pill.style.background = 'rgba(245, 158, 11, 0.12)';
+          pill.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+        } else {
+          text.textContent = 'Recording off';
+          btn.textContent = 'Start recording';
+          btn.classList.add('off');
+          btn.classList.remove('recovering');
+          btn.disabled = false;
+          pill.style.background = 'rgba(16, 185, 129, 0.12)';
+          pill.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+        }
+
+        btn.disabled = recovering;
+      }
+
+      function setValue(id, value, colorClass) {
+        const el = document.getElementById(id);
+        el.textContent = value;
+        el.classList.remove('green', 'orange', 'red');
+        if (colorClass) el.classList.add(colorClass);
+      }
+
       function updateMem() {
         fetch('/mem', { cache: 'no-store' })
           .then(r => r.json())
-          .then(data => {
-            document.getElementById("mem_status").innerText =
-              data.free_gb + " GB free";
-          });
+          .then(data => setValue('mem_status', data.free_gb + ' GB free'));
       }
 
       function updateFilename() {
@@ -76,9 +271,9 @@ HTML_PAGE = b"""
           .then(data => {
             if (data.name) {
               const simple = data.name.split('/').pop();
-              document.getElementById("file_name").innerText = simple;
+              setValue('file_name', simple);
             } else {
-              document.getElementById("file_name").innerText = "";
+              setValue('file_name', '--', 'orange');
             }
           });
       }
@@ -92,55 +287,44 @@ HTML_PAGE = b"""
         fetch('/status', { cache: 'no-store' })
           .then(r => r.json())
           .then(data => {
-            const s = document.getElementById("rec_status");
-            const b = document.getElementById("rec_btn");
-            const bt = document.getElementById("bt_status");
-            const rtc = document.getElementById("rtc_status");
-
             const recordingHealthy = data.record_active && data.record_running !== false;
             const recovering = data.record_active && data.record_running === false;
 
-            if (recordingHealthy) {
-              s.innerText = "Recording active";
-              s.style.color = "red";
-              b.innerText = "Stop recording";
-              b.disabled = false;
-            } else {
-              s.innerText = recovering ? "Recording recovering..." : "Recording off";
-              s.style.color = recovering ? "orange" : "gray";
-              b.innerText = recovering ? "Recovering" : "Start recording";
-              b.disabled = recovering;
-            }
+            setRecordingState(recordingHealthy, recovering);
 
             if (!data.available) {
-              bt.innerText = "Bluetooth remote not available";
-              bt.style.color = "darkred";
+              setValue('bt_status', 'Bluetooth remote not available', 'red');
             } else if (data.connected) {
-              bt.innerText = "Bluetooth remote connected";
-              bt.style.color = "green";
+              setValue('bt_status', 'Bluetooth remote connected', 'green');
             } else {
-              bt.innerText = "Bluetooth remote searching...";
-              bt.style.color = "orange";
+              setValue('bt_status', 'Bluetooth remote searching...', 'orange');
             }
 
             if (!data.rtc || !data.rtc.present) {
-              rtc.innerText = "RTC module not detected";
-              rtc.style.color = "darkred";
+              setValue('rtc_status', 'RTC module not detected', 'red');
             } else if (data.rtc.time) {
-              rtc.innerText = "RTC time: " + data.rtc.time;
-              rtc.style.color = "green";
+              setValue('rtc_status', 'RTC time: ' + data.rtc.time, 'green');
             } else {
-              rtc.innerText = "RTC detected; time unavailable";
-              rtc.style.color = "orange";
+              setValue('rtc_status', 'RTC detected; time unavailable', 'orange');
+            }
+
+            if (data.record_fps !== null && data.record_fps !== undefined) {
+              setValue('record_fps', data.record_fps.toFixed(1) + ' fps');
+            } else {
+              setValue('record_fps', '--', 'orange');
+            }
+
+            if (data.preview_fps !== null && data.preview_fps !== undefined) {
+              setValue('preview_fps', data.preview_fps.toFixed(1) + ' fps');
+            } else {
+              setValue('preview_fps', '--', 'orange');
             }
           });
       }
 
       function exitServer() {
         fetch('/exit', { cache: 'no-store' })
-          .then(() => {
-            alert("Server stopped");
-          });
+          .then(() => alert('Server stopped'));
       }
 
       setInterval(updateStatus, 1500);
@@ -151,7 +335,5 @@ HTML_PAGE = b"""
       updateMem();
       updateFilename();
     </script>
-
   </body>
-</html>
-"""
+</html>"""
