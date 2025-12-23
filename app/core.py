@@ -1,5 +1,6 @@
 import os
 import socket
+import subprocess
 
 CONFIG_FILE = "config.conf"
 
@@ -87,6 +88,17 @@ def get_network_ip():
         return None
     finally:
         s.close()
+
+
+def get_wifi_ssid():
+    try:
+        result = subprocess.run(
+            ["iwgetid", "-r"], capture_output=True, text=True, timeout=1
+        )
+        ssid = result.stdout.strip()
+        return ssid or None
+    except Exception:
+        return None
 
 
 def get_free_space_gb():

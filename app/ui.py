@@ -1,9 +1,15 @@
-HTML_PAGE = b"""<!DOCTYPE html>
+from .core import STREAM_TEXT
+
+
+STREAM_LABEL = STREAM_TEXT.strip("\"")
+PAGE_TITLE = f"{STREAM_LABEL} Control"
+
+HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang=\"en\">
   <head>
     <meta charset=\"UTF-8\">
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-    <title>TheraView Control</title>
+    <title>{{PAGE_TITLE}}</title>
     <style>
       :root {
         --bg: #0f172a;
@@ -188,6 +194,8 @@ HTML_PAGE = b"""<!DOCTYPE html>
       .label { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: 0.4px; }
       .value { font-size: 18px; font-weight: 700; }
 
+      #file_name { font-size: 14px; word-break: break-word; line-height: 1.3; }
+
       .value.green { color: var(--accent); }
       .value.orange { color: var(--warn); }
       .value.red { color: var(--danger); }
@@ -200,16 +208,15 @@ HTML_PAGE = b"""<!DOCTYPE html>
     </style>
   </head>
   <body>
-    <div class=\"page\">
-      <header>
-        <div class=\"title\">
-          <h1>TheraView Control</h1>
-          <span>Monitor capture, recording, and device health</span>
-        </div>
-        <div id=\"rec_status\" class=\"record-pill\">
-          <span class=\"record-dot\"></span>
-          <span class=\"record-text\">Recording active</span>
-        </div>
+      <div class=\"page\">
+        <header>
+          <div class=\"title\">
+          <h1>{{PAGE_TITLE}}</h1>
+          </div>
+          <div id=\"rec_status\" class=\"record-pill\">
+            <span class=\"record-dot\"></span>
+            <span class=\"record-text\">Recording active</span>
+          </div>
       </header>
 
       <div class=\"grid\">
@@ -232,8 +239,8 @@ HTML_PAGE = b"""<!DOCTYPE html>
 
         <div class=\"card controls\">
           <button id=\"rec_btn\" onclick=\"toggleRecord()\">Stop recording</button>
-          <button id=\"video_btn\" onclick=\"toggleVideo()\">Stop video system</button>
-          <button id=\"exit_btn\" onclick=\"exitServer()\">Exit</button>
+          <button id=\"video_btn\" onclick=\"toggleVideo()\">Stop preview</button>
+          <button id=\"exit_btn\" onclick=\"exitServer()\">Exit and close server</button>
 
           <div class=\"status-grid\">
             <div class=\"status-item\">
@@ -253,8 +260,22 @@ HTML_PAGE = b"""<!DOCTYPE html>
               <div id=\"rtc_status\" class=\"value\">Checking...</div>
             </div>
             <div class=\"status-item\">
-              <div class=\"label\">Video System</div>
+              <div class=\"label\">Preview</div>
               <div id=\"video_state\" class=\"value\">Starting...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class=\"card controls\">
+          <div class=\"label\">Network</div>
+          <div class=\"status-grid\">
+            <div class=\"status-item\">
+              <div class=\"label\">Wi-Fi</div>
+              <div id=\"wifi_name\" class=\"value\">--</div>
+            </div>
+            <div class=\"status-item\">
+              <div class=\"label\">IP Address</div>
+              <div id=\"ip_addr\" class=\"value\">--</div>
             </div>
           </div>
         </div>
@@ -298,12 +319,12 @@ HTML_PAGE = b"""<!DOCTYPE html>
 
         if (enabled) {
           setValue('video_state', 'Running', 'green');
-          videoBtn.textContent = 'Stop video system';
+          videoBtn.textContent = 'Stop preview';
           videoBtn.disabled = false;
           recBtn.disabled = recBtn.classList.contains('recovering');
         } else {
-          setValue('video_state', 'Stopped', 'red');
-          videoBtn.textContent = 'Start video system';
+          setValue('video_state', 'Stopped', 'orange');
+          videoBtn.textContent = 'Start preview';
           videoBtn.disabled = false;
           recBtn.disabled = true;
         }
@@ -379,6 +400,19 @@ HTML_PAGE = b"""<!DOCTYPE html>
               setValue('rtc_status', 'RTC detected; time unavailable', 'orange');
             }
 
+            const network = data.network || {};
+            if (network.ssid) {
+              setValue('wifi_name', network.ssid, 'green');
+            } else {
+              setValue('wifi_name', 'Not connected', 'red');
+            }
+
+            if (network.ip) {
+              setValue('ip_addr', network.ip, 'green');
+            } else {
+              setValue('ip_addr', 'Unavailable', 'orange');
+            }
+
             if (videoEnabled && data.record_fps !== null && data.record_fps !== undefined) {
               setValue('record_fps', data.record_fps.toFixed(1) + ' fps');
             } else {
@@ -408,3 +442,5 @@ HTML_PAGE = b"""<!DOCTYPE html>
     </script>
   </body>
 </html>"""
+
+HTML_PAGE = HTML_TEMPLATE.replace("{{PAGE_TITLE}}", PAGE_TITLE).encode("utf-8")

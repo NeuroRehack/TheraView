@@ -7,7 +7,7 @@ import datetime
 import time
 
 from .video import preview_pipeline, record_pipeline
-from .core import OUTPUT_DIR, BASENAME_PREFIX
+from .core import OUTPUT_DIR, BASENAME_PREFIX, get_network_ip, get_wifi_ssid
 
 
 led_controller = None
@@ -22,6 +22,7 @@ current_filename = ""
 record_start_stamp = None
 preview_fps = None
 record_fps = None
+network_snapshot = {"timestamp": 0.0, "ssid": None, "ip": None}
 
 
 def set_led_controller(controller):
@@ -45,6 +46,20 @@ def _format_timestamp(dt=None):
 
 def _build_record_basename(start_stamp, end_stamp):
     return f"PID_{start_stamp}_{end_stamp}_{BASENAME_PREFIX}_THERAPY_NN"
+
+
+def _network_status():
+    global network_snapshot
+
+    now = time.time()
+    if now - network_snapshot["timestamp"] > 10:
+        network_snapshot = {
+            "timestamp": now,
+            "ssid": get_wifi_ssid(),
+            "ip": get_network_ip(),
+        }
+
+    return {"ssid": network_snapshot["ssid"], "ip": network_snapshot["ip"]}
 
 
 def _flush_record_file():
@@ -277,6 +292,7 @@ def status_snapshot():
                 "preview_fps": preview_fps,
                 "record_fps": record_fps,
                 "pipelines_enabled": pipelines_enabled,
+                "network": _network_status(),
             }
 
         if active_record:
@@ -309,4 +325,5 @@ def status_snapshot():
             "preview_fps": preview_fps,
             "record_fps": record_fps,
             "pipelines_enabled": pipelines_enabled,
+            "network": _network_status(),
         }
