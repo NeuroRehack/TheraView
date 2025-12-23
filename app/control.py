@@ -19,6 +19,7 @@ pipelines_enabled = True
 active_record = False
 record_restart_at = 0.0
 current_filename = ""
+record_start_stamp = None
 preview_fps = None
 record_fps = None
 
@@ -38,6 +39,14 @@ def _proc_alive(proc):
     return proc is not None and proc.poll() is None
 
 
+def _format_timestamp(dt=None):
+    return (dt or datetime.datetime.now()).strftime("%y%m%d%H%M")
+
+
+def _build_record_basename(start_stamp, end_stamp):
+    return f"PID_{start_stamp}_{end_stamp}_{BASENAME_PREFIX}_THERAPY_NN"
+
+
 def _flush_record_file():
     """Attempt to flush the current recording file to avoid corruption."""
 
@@ -49,6 +58,34 @@ def _flush_record_file():
             os.fsync(f.fileno())
     except Exception as exc:  # pragma: no cover - best effort
         print(f"Failed to fsync {current_filename}: {exc}")
+
+
+def _finalize_record_file():
+    """Rename the recording to include its end timestamp."""
+
+    global current_filename, record_start_stamp
+
+    if not record_start_stamp or not current_filename or not os.path.exists(current_filename):
+        record_start_stamp = None
+        return
+
+    end_stamp = _format_timestamp()
+    final_path = os.path.join(
+        OUTPUT_DIR,
+        f"{_build_record_basename(record_start_stamp, end_stamp)}.mp4",
+    )
+
+    if final_path == current_filename:
+        record_start_stamp = None
+        return
+
+    try:
+        os.rename(current_filename, final_path)
+        current_filename = final_path
+    except OSError as exc:  # pragma: no cover - best effort
+        print(f"Failed to finalize recording filename: {exc}")
+
+    record_start_stamp = None
 
 
 def _monitor_fps(proc, key):
@@ -102,11 +139,14 @@ def start_preview_only():
     _start_monitor_thread(preview_proc, "preview")
 
 def start_record_plus_preview():
-    global record_proc, current_filename
+    global record_proc, current_filename, record_start_stamp
     stop_pipelines()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    current_filename = os.path.join(OUTPUT_DIR, f"{BASENAME_PREFIX}{ts}.mp4")
+    record_start_stamp = _format_timestamp()
+    current_filename = os.path.join(
+        OUTPUT_DIR,
+        f"{_build_record_basename(record_start_stamp, 'RUNNING')}.mp4",
+    )
     record_proc = subprocess.Popen(
         record_pipeline(current_filename),
         stdout=subprocess.PIPE,
@@ -141,6 +181,7 @@ def stop_pipelines():
             except:
                 record_proc.kill()
         _flush_record_file()
+        _finalize_record_file()
         record_proc = None
 
 
