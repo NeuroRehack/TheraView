@@ -68,12 +68,24 @@ HTML_PAGE = b"""<!DOCTYPE html>
         gap: 10px;
         padding: 10px 16px;
         border-radius: 999px;
-        background: rgba(239, 68, 68, 0.12);
-        color: var(--danger);
         font-weight: 700;
         letter-spacing: 0.3px;
         text-transform: uppercase;
         border: 1px solid rgba(239, 68, 68, 0.25);
+        background: rgba(239, 68, 68, 0.12);
+        color: var(--danger);
+      }
+
+      .record-pill.recovering {
+        background: rgba(245, 158, 11, 0.12);
+        border-color: rgba(245, 158, 11, 0.35);
+        color: var(--warn);
+      }
+
+      .record-pill.off {
+        background: rgba(107, 114, 128, 0.12);
+        border-color: rgba(107, 114, 128, 0.35);
+        color: #9ca3af;
       }
 
       .record-dot {
@@ -82,6 +94,17 @@ HTML_PAGE = b"""<!DOCTYPE html>
         border-radius: 50%;
         background: var(--danger);
         box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.18);
+        transition: background 120ms ease, box-shadow 120ms ease;
+      }
+
+      .record-pill.recovering .record-dot {
+        background: var(--warn);
+        box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.2);
+      }
+
+      .record-pill.off .record-dot {
+        background: #9ca3af;
+        box-shadow: 0 0 0 6px rgba(156, 163, 175, 0.18);
       }
 
       .grid {
@@ -99,12 +122,25 @@ HTML_PAGE = b"""<!DOCTYPE html>
         box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
       }
 
-      .preview img {
-        width: 100%;
+      .preview-frame {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: min(100%, 640px);
+        aspect-ratio: 16 / 9;
+        margin-top: 6px;
         border-radius: 12px;
         border: 1px solid #111827;
-        object-fit: cover;
         background: black;
+        overflow: hidden;
+      }
+
+      .preview-frame img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        background: black;
+        display: block;
       }
 
       .controls {
@@ -179,7 +215,9 @@ HTML_PAGE = b"""<!DOCTYPE html>
       <div class=\"grid\">
         <div class=\"card preview\">
           <div class=\"label\">Live Preview</div>
-          <img src=\"/stream\" alt=\"Live preview\" width=\"640\" height=\"480\">
+          <div class=\"preview-frame\">
+            <img src=\"/stream\" alt=\"Live preview\" width=\"640\" height=\"360\">
+          </div>
           <div class=\"status-grid\" style=\"margin-top: 12px;\">
             <div class=\"status-item\">
               <div class=\"label\">Recording FPS</div>
@@ -229,30 +267,26 @@ HTML_PAGE = b"""<!DOCTYPE html>
         const text = pill.querySelector('.record-text');
         const btn = document.getElementById('rec_btn');
 
-        pill.classList.remove('warn', 'off');
+        pill.classList.remove('recovering', 'off');
 
         if (recordingHealthy) {
           text.textContent = 'Recording active';
           btn.textContent = 'Stop recording';
           btn.classList.remove('recovering', 'off');
-          pill.style.background = 'rgba(239, 68, 68, 0.12)';
-          pill.style.borderColor = 'rgba(239, 68, 68, 0.25)';
         } else if (recovering) {
           text.textContent = 'Recording recovering...';
           btn.textContent = 'Recovering';
           btn.classList.add('recovering');
           btn.classList.remove('off');
           btn.disabled = true;
-          pill.style.background = 'rgba(245, 158, 11, 0.12)';
-          pill.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+          pill.classList.add('recovering');
         } else {
           text.textContent = 'Recording off';
           btn.textContent = 'Start recording';
           btn.classList.add('off');
           btn.classList.remove('recovering');
           btn.disabled = false;
-          pill.style.background = 'rgba(16, 185, 129, 0.12)';
-          pill.style.borderColor = 'rgba(16, 185, 129, 0.25)';
+          pill.classList.add('off');
         }
 
         btn.disabled = recovering || controlsDisabled;
