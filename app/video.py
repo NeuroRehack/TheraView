@@ -54,7 +54,9 @@ def record_pipeline(filename):
         "tune=zerolatency",
         f"key-int-max={FRAMERATE}",
         "threads=0",
+        "!", "queue", "max-size-time=2000000000", "max-size-bytes=0", "max-size-buffers=0",
         "!", "h264parse",
+        "!", "queue", "max-size-time=2000000000", "max-size-bytes=0", "max-size-buffers=0",
         "!", "mp4mux", "faststart=true",
         "!", "filesink", f"location={filename}",
 

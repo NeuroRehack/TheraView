@@ -22,6 +22,10 @@ current_filename = ""
 record_start_stamp = None
 preview_fps = None
 record_fps = None
+preview_fps_at = None
+record_fps_at = None
+preview_started_at = None
+record_started_at = None
 network_snapshot = {"timestamp": 0.0, "ssid": None, "ip": None}
 
 
@@ -104,7 +108,7 @@ def _finalize_record_file():
 
 
 def _monitor_fps(proc, key):
-    global preview_fps, record_fps
+    global preview_fps, record_fps, preview_fps_at, record_fps_at
 
     while True:
         line = proc.stderr.readline()
@@ -128,23 +132,37 @@ def _monitor_fps(proc, key):
             with proc_lock:
                 if key == "preview":
                     preview_fps = value
+                    preview_fps_at = time.time()
                 else:
                     record_fps = value
+                    record_fps_at = time.time()
 
     with proc_lock:
         if key == "preview":
             preview_fps = None
+            preview_fps_at = None
         else:
             record_fps = None
+            record_fps_at = None
 
 
 def _start_monitor_thread(proc, key):
     thread = threading.Thread(target=_monitor_fps, args=(proc, key), daemon=True)
     thread.start()
 
+
+def _fps_stalled(ts, started_at, grace=3.0):
+    if ts is None:
+        if started_at is None:
+            return False
+        return (time.time() - started_at) > grace
+    return (time.time() - ts) > grace
+
 def start_preview_only():
-    global preview_proc
+    global preview_proc, preview_started_at, record_started_at
     stop_pipelines()
+    preview_started_at = time.time()
+    record_started_at = None
     preview_proc = subprocess.Popen(
         preview_pipeline(),
         stdout=subprocess.PIPE,
@@ -154,7 +172,7 @@ def start_preview_only():
     _start_monitor_thread(preview_proc, "preview")
 
 def start_record_plus_preview():
-    global record_proc, current_filename, record_start_stamp
+    global record_proc, current_filename, record_start_stamp, record_started_at
     stop_pipelines()
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     record_start_stamp = _format_timestamp()
@@ -162,6 +180,7 @@ def start_record_plus_preview():
         OUTPUT_DIR,
         f"{_build_record_basename(record_start_stamp, 'RUNNING')}.mp4",
     )
+    record_started_at = time.time()
     record_proc = subprocess.Popen(
         record_pipeline(current_filename),
         stdout=subprocess.PIPE,
@@ -171,7 +190,7 @@ def start_record_plus_preview():
     _start_monitor_thread(record_proc, "record")
 
 def stop_pipelines():
-    global preview_proc, record_proc
+    global preview_proc, record_proc, preview_started_at, record_started_at
 
     if preview_proc is not None:
         try:
@@ -198,6 +217,10 @@ def stop_pipelines():
         _flush_record_file()
         _finalize_record_file()
         record_proc = None
+        record_started_at = None
+
+    if preview_proc is None:
+        preview_started_at = None
 
 
 def set_recording_state(recording: bool):
@@ -296,6 +319,13 @@ def status_snapshot():
             }
 
         if active_record:
+            if record_alive and _fps_stalled(record_fps_at, record_started_at):
+                print("Recording pipeline appears stalled; restarting.")
+                stop_pipelines()
+                record_alive = False
+                preview_alive = False
+                record_restart_at = 0.0
+
             if not record_alive:
                 now = time.time()
                 if now - record_restart_at >= 2.0:
@@ -311,6 +341,10 @@ def status_snapshot():
             if record_alive:
                 stop_pipelines()
                 record_alive = False
+            elif preview_alive and _fps_stalled(preview_fps_at, preview_started_at):
+                print("Preview pipeline appears stalled; restarting.")
+                stop_pipelines()
+                preview_alive = False
             if not preview_alive:
                 start_preview_only()
                 preview_alive = _proc_alive(preview_proc)
