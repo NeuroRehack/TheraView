@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-cd /home/pi/TheraView
-source venv/bin/activate
-python3 - << 'EOF'
-from app.run import run
-run()
-EOF

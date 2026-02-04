@@ -1,0 +1,5 @@
+recordings/
+logs/
+*.log
+*.mkv
+*.mp4
