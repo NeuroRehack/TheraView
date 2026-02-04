@@ -1,0 +1,17 @@
+[Unit]
+Description=TheraView Camera Recording Service
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/pi/TheraView/scripts/theraview_recorder.sh
+Restart=always
+RestartSec=2
+Environment=OUTDIR=/home/pi/TheraView/recordings
+Environment=LOGDIR=/home/pi/TheraView/logs
+Environment=CAMERA=/dev/video0
+Environment=STREAM_PORT=5000
+
+[Install]
+WantedBy=multi-user.target
