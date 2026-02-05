@@ -2,6 +2,22 @@
 
 This repository contains a crash-safe USB camera recorder using GStreamer, plus a helper script to concatenate MKV segments into MP4.
 
+## How to use (quick start)
+
+1. **Before anything**, make sure you have VLC installed on your phone or laptop.
+2. Turn the Raspberry Pi on and wait ~1 minute for it to boot.
+3. Connect to the Pi's hotspot network. It is named:
+   - `TheraView_TVA` **or** ends with `TVB`, `TVC`, or `TVD`
+4. Hotspot password: `ritaengs`
+5. Open the live feed in VLC:
+   - Phone: you can use `tva.local:<port>` (mDNS). Some QH laptops do **not** resolve this name.
+   - If `tva.local` fails, use the IP address: `10.42.0.1:<port>`
+   - Default stream address is `tcp://10.42.0.1:5000` unless `STREAM_PORT` is overridden.
+6. Web UI (HTTP):
+   - Open `http://10.42.0.1:8080` (or `http://tva.local:8080` if mDNS works) to view recordings and trigger concat.
+7. To control start/stop of recording, simply plug in and unplug the USB webcam.
+   - **Whenever the webcam light is on, it is both recording and streaming.**
+
 ## Structure
 
 - `scripts/theraview_recorder.sh` - main recorder supervisor loop
@@ -48,16 +64,23 @@ To stop and remove services:
 ./scripts/remove_theraview_services.sh
 ```
 
-## How to use
+## Detailed usage
 
 1. Plug in the camera and ensure it appears as `/dev/video0` (or set `CAMERA`).
 2. The recorder service will start automatically and write MKV chunks to `recordings/`.
-3. Open the web UI at `http://<pi-ip>:8080` to:
-   - View recording status.
-   - Trigger concat/convert to MP4.
-   - Review and delete MKV chunks once `.checked.mp4` exists.
-4. If you want to run concat manually, use `scripts/concat_and_convert.sh` (see below).
-5. To view the live feed in VLC, open **Media → Open Network Stream** and enter
+   - Large MKV files are the recordings, and a new one starts every 5 minutes.
+3. Open the web UI at `http://<pi-ip>:8080`.
+   - The HTML page is a simple dashboard: it lists files for download, shows live status/logs,
+     and provides buttons to run concat/convert or cleanup files.
+4. When you are done recording, click **Run concat_and_convert** to concat and convert the MKV
+   chunks into an MP4 file. It may take a while—keep an eye on the status.
+5. When conversion is done, filenames change. You can download the `_checked.mp4` files.
+   - If there is no `_checked` in the filename, something is wrong.
+6. After you download and review a `_checked.mp4` and are happy with it, remove the MKV files
+   (marked as converted) using the cleanup button.
+7. You can also delete **all** files including MP4 files using **Cleanup All Files**, but be careful.
+8. If you want to run concat manually, use `scripts/concat_and_convert.sh` (see below).
+9. To view the live feed in VLC, open **Media → Open Network Stream** and enter
    `tcp://<pi-ip>:5000` (or your `STREAM_PORT`). Expect a 5+ second delay due to buffering. The
    web UI also shows the current `tcp://` stream link in the System card.
 
