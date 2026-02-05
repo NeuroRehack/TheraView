@@ -3,26 +3,62 @@
 This repository contains a crash-safe USB camera recorder using GStreamer, plus a helper script to concatenate MKV segments into MP4.
 
 ## How to use (quick start)
+1. **Before anything**, make sure VLC is installed on your phone or laptop.
 
-1. **Before anything**, make sure you have VLC installed on your phone or laptop.
-2. Turn the Raspberry Pi on and wait ~1 minute for it to boot.
-3. Once the camera is connected, the recording and streaming starts, you can confirm this via the blue LED on the camera. 
-4. Connect to the Pi's hotspot network. It is named:
-   - `TheraView_TVA` **or** ends with `TVB`, `TVC`, or `TVD`
-5. Hotspot password: `ritaengs`
+2. Turn on the Raspberry Pi and wait approximately **1 minute** for it to fully boot.
+
+3. Once the camera is connected, recording and streaming will start automatically. You can confirm this by checking the **blue LED** on the camera.
+
+4. Connect to the Pi’s hotspot network. It will be named:
+   - `TheraView_TVA` **or**
+   - Ends with `TVB`, `TVC`, or `TVD`
+
+5. **Hotspot password:** `ritaengs`
+
 6. To view the live feed in VLC:
-   - Open Network Steam -->  `tcp://10.42.0.1::5000` (The live feed is 5 seconds delayed) 
-   - Instead of the ip address you can use tva.local for TVA and tvb.local for TVB and so on, but it only works on Phone, not QH laptops 
-7. Web UI (HTTP):
-   - Open `http://10.42.0.1:8080` (or `http://tv?.local:8080`) to view recording files.
-8. To control start/stop of recording, you can simply plug in and unplug the USB webcam or use the button in the web UI.
-9. The recoding files are raw and very large, they also re-start every 5 minites to avoid very large files. DO NOT DOWNLOAD THE MKV FILES. When you are done recording, unplug the camera and click **Run concat_and_convert** to join the files and convert to MKV chunks into an MP4 file. It may take a while—keep an eye on the status (almost 30 minutes for 1 hour of recording)
-10. 
-11. When conversion is done, filenames change. You can download the `_checked.mp4` files and play them to see if they are correct.
-   - If there is no `_checked` in the filename, something is wrong and you need to re-run the concat_and_convert.
-12. After files are downloaded and you confirm they are ok, you can delete the large MKV files by running click on Review MKV deletion to see which ones will be deleted and then delete them by the button.
-13. You can also delete **all** files including MP4 files using **Cleanup All Files**, but be careful.
+   - Open **Network Stream** → enter:  
+     `tcp://10.42.0.1::5000`  
+     *(The live feed has approximately a 5-second delay.)*
+   - Instead of the IP address, you can use:
+     - `tva.local` (for TVA)
+     - `tvb.local` (for TVB)
+     - etc.  
+     ⚠️ This only works on phones, not on QH laptops.
 
+7. **Web UI (HTTP):**
+   - Open:  
+     `http://10.42.0.1:8080`  
+     or  
+     `http://tv?.local:8080`  
+   - Use this page to view recording files.
+
+8. To control recording (start/stop):
+   - Plug in or unplug the USB webcam, **or**
+   - Use the control button in the Web UI.
+
+9. Recording files are saved as raw files and are very large.  
+   New files are automatically created every **5 minutes** to prevent excessively large file sizes.
+
+   **DO NOT download the MKV files.**
+
+   When you are finished recording:
+   - Unplug the camera.
+   - Click **Run concat_and_convert** to merge the files and convert the MKV chunks into an MP4 file.
+   - Conversion may take some time (approximately **30 minutes for 1 hour of recording**). Monitor the status during processing.
+
+10. 
+
+11. Once conversion is complete, the filenames will change.  
+    Download the `_checked.mp4` files and play them to verify they are correct.
+
+    - If the filename does **not** include `_checked`, something went wrong and you should re-run **concat_and_convert**.
+
+12. After downloading the files and confirming they are correct:
+    - Click **Review MKV deletion** to see which MKV files will be deleted.
+    - Delete them using the provided button.
+
+13. You can also delete **all files**, including MP4 files, by clicking **Cleanup All Files**.  
+    ⚠️ Use this option carefully.
 ## Structure
 
 - `scripts/theraview_recorder.sh` - main recorder supervisor loop
@@ -34,6 +70,8 @@ This repository contains a crash-safe USB camera recorder using GStreamer, plus 
 - `scripts/setup_theraview.sh` - one-shot setup for dependencies + systemd units
 - `scripts/remove_theraview_services.sh` - stops and removes systemd units
 - `scripts/setup_hotspot.sh` - configure the Pi as a Wi-Fi hotspot
+
+
 
 ## Requirements
 
@@ -69,26 +107,6 @@ To stop and remove services:
 ./scripts/remove_theraview_services.sh
 ```
 
-## Detailed usage
-
-1. Plug in the camera and ensure it appears as `/dev/video0` (or set `CAMERA`).
-2. The recorder service will start automatically and write MKV chunks to `recordings/`.
-   - Large MKV files are the recordings, and a new one starts every 5 minutes.
-3. Open the web UI at `http://<pi-ip>:8080`.
-   - The HTML page is a simple dashboard: it lists files for download, shows live status/logs,
-     and provides buttons to run concat/convert or cleanup files.
-4. When you are done recording, click **Run concat_and_convert** to concat and convert the MKV
-   chunks into an MP4 file. It may take a while—keep an eye on the status.
-5. When conversion is done, filenames change. You can download the `_checked.mp4` files.
-   - If there is no `_checked` in the filename, something is wrong.
-6. After you download and review a `_checked.mp4` and are happy with it, remove the MKV files
-   (marked as converted) using the cleanup button.
-7. You can also delete **all** files including MP4 files using **Cleanup All Files**, but be careful.
-8. If you want to run concat manually, use `scripts/concat_and_convert.sh` (see below).
-9. To view the live feed in VLC, open **Media → Open Network Stream** and enter
-   `tcp://<pi-ip>:5000` (or your `STREAM_PORT`). Expect a 5+ second delay due to buffering. The
-   web UI also shows the current `tcp://` stream link in the System card.
-
 ## Behavior
 
 - The recorder waits for the camera device to exist.
@@ -97,17 +115,6 @@ To stop and remove services:
 - Run `scripts/concat_and_convert.sh` manually when you want to merge sequential segments into a single MP4, validate duration with `ffprobe`, and stamp the filename with `.checked.mp4` once validated.
 - Use the web UI cleanup section to delete MKV chunks only after verified `.checked.mp4` files match the total MKV duration.
 
-## Web viewer
-
-Start the web viewer service and open `http://<pi-ip>:8080` to view recordings and trigger the concat job. The UI shows the current status and recent log output.
-
-## Manual concatenation (SSH-safe)
-
-If you want the concat job to keep running even if your SSH session disconnects, launch it with `nohup` or inside a `tmux` session:
-
-```bash
-nohup /home/pi/TheraView/scripts/concat_and_convert.sh > /home/pi/TheraView/logs/concat_and_convert.log 2>&1 &
-```
 
 ## Configuration
 
@@ -119,14 +126,3 @@ You can override defaults using environment variables (for systemd, set them in 
 - `RECORD_WIDTH`, `RECORD_HEIGHT`, `FRAMERATE`, `RECORD_BITRATE`, `ROTATE_SECONDS`
 - `STREAM_WIDTH`, `STREAM_HEIGHT`, `STREAM_BITRATE`, `STREAM_PORT`
 
-## Hotspot setup
-
-The hotspot script uses NetworkManager (`nmcli`) to create an AP connection. The SSID defaults to
-`TheraView_<hostname>`.
-
-```bash
-./scripts/setup_hotspot.sh
-```
-
-You can override defaults with environment variables like `SSID`, `WPA_PASSPHRASE`, `INTERFACE`,
-`HOTSPOT_IP`, and `CONNECTION_NAME`.
