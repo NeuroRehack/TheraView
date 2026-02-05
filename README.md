@@ -17,36 +17,32 @@ This repository contains a crash-safe USB camera recorder using GStreamer, plus 
 
 6. To view the live feed in VLC:
    - Open **Network Stream** → enter:  
-     `tcp://10.42.0.1::5000`  
+     `tcp://10.42.0.1:5000`  
      *(The live feed has approximately a 5-second delay.)*
-   - Instead of the IP address, you can use:
+   - Instead of the IP address, you can use (works on phone, not on QH laptops):
      - `tva.local` (for TVA)
      - `tvb.local` (for TVB)
      - etc.  
-     ⚠️ This only works on phones, not on QH laptops.
+
 
 7. **Web UI (HTTP):**
    - Open:  
      `http://10.42.0.1:8080`  
      or  
-     `http://tv?.local:8080`  
-   - Use this page to view recording files.
+     `http://tv?.local:8080`  (phone only)
+   - Use this page to view recording files and download them.
 
 8. To control recording (start/stop):
    - Plug in or unplug the USB webcam, **or**
    - Use the control button in the Web UI.
 
 9. Recording files are saved as raw files and are very large.  
-   New files are automatically created every **5 minutes** to prevent excessively large file sizes.
-
-   **DO NOT download the MKV files.**
+   Recording files are automatically created every **5 minutes** to prevent excessively large file sizes.    **DO NOT download the MKV files.**
 
    When you are finished recording:
-   - Unplug the camera.
+   - Unplug the camera or stop the recording in the Web UI.
    - Click **Run concat_and_convert** to merge the files and convert the MKV chunks into an MP4 file.
    - Conversion may take some time (approximately **30 minutes for 1 hour of recording**). Monitor the status during processing.
-
-10. 
 
 11. Once conversion is complete, the filenames will change.  
     Download the `_checked.mp4` files and play them to verify they are correct.
@@ -59,6 +55,9 @@ This repository contains a crash-safe USB camera recorder using GStreamer, plus 
 
 13. You can also delete **all files**, including MP4 files, by clicking **Cleanup All Files**.  
     ⚠️ Use this option carefully.
+
+
+    
 ## Structure
 
 - `scripts/theraview_recorder.sh` - main recorder supervisor loop
