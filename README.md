@@ -6,17 +6,22 @@ This repository contains a crash-safe USB camera recorder using GStreamer, plus 
 
 1. **Before anything**, make sure you have VLC installed on your phone or laptop.
 2. Turn the Raspberry Pi on and wait ~1 minute for it to boot.
-3. Connect to the Pi's hotspot network. It is named:
+3. Once the camera is connected, the recording and streaming starts, you can confirm this via the blue LED on the camera. 
+4. Connect to the Pi's hotspot network. It is named:
    - `TheraView_TVA` **or** ends with `TVB`, `TVC`, or `TVD`
-4. Hotspot password: `ritaengs`
-5. Open the live feed in VLC:
-   - Phone: you can use `tva.local:<port>` (mDNS). Some QH laptops do **not** resolve this name.
-   - If `tva.local` fails, use the IP address: `10.42.0.1:<port>`
-   - Default stream address is `tcp://10.42.0.1:5000` unless `STREAM_PORT` is overridden.
-6. Web UI (HTTP):
-   - Open `http://10.42.0.1:8080` (or `http://tva.local:8080` if mDNS works) to view recordings and trigger concat.
-7. To control start/stop of recording, simply plug in and unplug the USB webcam.
-   - **Whenever the webcam light is on, it is both recording and streaming.**
+5. Hotspot password: `ritaengs`
+6. To view the live feed in VLC:
+   - Open Network Steam -->  `tcp://10.42.0.1::5000` (The live feed is 5 seconds delayed) 
+   - Instead of the ip address you can use tva.local for TVA and tvb.local for TVB and so on, but it only works on Phone, not QH laptops 
+7. Web UI (HTTP):
+   - Open `http://10.42.0.1:8080` (or `http://tv?.local:8080`) to view recording files.
+8. To control start/stop of recording, you can simply plug in and unplug the USB webcam or use the button in the web UI.
+9. The recoding files are raw and very large, they also re-start every 5 minites to avoid very large files. DO NOT DOWNLOAD THE MKV FILES. When you are done recording, unplug the camera and click **Run concat_and_convert** to join the files and convert to MKV chunks into an MP4 file. It may take a while—keep an eye on the status (almost 30 minutes for 1 hour of recording)
+10. 
+11. When conversion is done, filenames change. You can download the `_checked.mp4` files and play them to see if they are correct.
+   - If there is no `_checked` in the filename, something is wrong and you need to re-run the concat_and_convert.
+12. After files are downloaded and you confirm they are ok, you can delete the large MKV files by running click on Review MKV deletion to see which ones will be deleted and then delete them by the button.
+13. You can also delete **all** files including MP4 files using **Cleanup All Files**, but be careful.
 
 ## Structure
 
