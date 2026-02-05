@@ -364,6 +364,21 @@ def delete_mkv_chunks(prefixes):
     return {"deleted": deleted, "skipped": skipped}
 
 
+def delete_all_files():
+    deleted = []
+    skipped = []
+    for name in sorted(os.listdir(OUTDIR)):
+        path = os.path.join(OUTDIR, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            os.remove(path)
+            deleted.append(name)
+        except OSError:
+            skipped.append(name)
+    return {"deleted": deleted, "skipped": skipped}
+
+
 def run_concat():
     with RUN_LOCK:
         status = read_status()
@@ -581,6 +596,10 @@ class Handler(BaseHTTPRequestHandler):
             result = delete_mkv_chunks(prefixes)
             self._send_json({"ok": True, **result})
             return
+        if parsed.path == "/cleanup-all":
+            result = delete_all_files()
+            self._send_json({"ok": True, **result})
+            return
         if parsed.path == "/service":
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -705,6 +724,13 @@ INDEX_HTML = """<!doctype html>
           <p>Files queued for deletion:</p>
           <ul id=\"cleanup-list\"></ul>
           <p id=\"cleanup-blocked\"></p>
+        </div>
+      </div>
+      <div class=\"card\">
+        <h3>Cleanup All Files</h3>
+        <p><strong>Serious Warning:</strong> This permanently deletes <em>all</em> recordings, including MP4 files.</p>
+        <div class=\"button-row\">
+          <button id=\"confirm-cleanup-all\" class=\"danger\">Delete ALL files</button>
         </div>
       </div>
     </div>
@@ -851,6 +877,26 @@ document.getElementById('confirm-cleanup').addEventListener('click', async () =>
   }
   cleanupPrefixes = [];
   document.getElementById('confirm-cleanup').disabled = true;
+  await fetchFiles();
+});
+
+document.getElementById('confirm-cleanup-all').addEventListener('click', async () => {
+  const confirmDelete = confirm('SERIOUS WARNING: This will permanently delete ALL recordings, including MP4 files. This cannot be undone.');
+  if (!confirmDelete) {
+    return;
+  }
+  const typed = prompt('Type DELETE ALL to confirm permanently deleting every recording file.');
+  if (typed !== 'DELETE ALL') {
+    alert('Cleanup all canceled. Confirmation phrase did not match.');
+    return;
+  }
+  const res = await fetch('/cleanup-all', { method: 'POST' });
+  const data = await res.json();
+  if (!data.ok) {
+    alert(data.message || 'Cleanup all failed.');
+    return;
+  }
+  alert(`Deleted ${data.deleted.length} files. Skipped ${data.skipped.length} files.`);
   await fetchFiles();
 });
 
