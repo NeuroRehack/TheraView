@@ -57,7 +57,7 @@ run_pipeline() {
         videoscale ! \
         videoconvert ! \
         clockoverlay time-format="%Y-%m-%d %H:%M:%S" ! \
-        textoverlay text="Free: ${free_space}" valignment=top halignment=left font-desc="Sans, 16" shaded-background=true ! \
+        textoverlay text="Free: ${free_space}" valignment=top halignment=right font-desc="Sans, 16" shaded-background=true ! \
         video/x-raw,width=$STREAM_WIDTH,height=$STREAM_HEIGHT,framerate=$FRAMERATE/1 ! \
         x264enc \
           tune=zerolatency \
