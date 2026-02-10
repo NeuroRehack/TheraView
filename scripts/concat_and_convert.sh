@@ -87,7 +87,7 @@ for prefix in "${prefixes[@]}"; do
   log "Concatenating ${#chunks[@]} chunks into $output_mp4"
 
   if ! "$FFMPEG" -hide_banner -loglevel error -f concat -safe 0 -i "$concat_list" \
-    -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 192k "$output_mp4"; then
+    -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 192k "$output_mp4"; then
     log "ffmpeg concat/compress failed for $prefix"
     rm -f "$concat_list"
     continue
