@@ -4,11 +4,9 @@ set -euo pipefail
 SYSTEMD_DIR=${SYSTEMD_DIR:-/etc/systemd/system}
 
 sudo systemctl disable --now theraview-camera.service || true
-sudo systemctl disable --now theraview-recorder.service || true
 sudo systemctl disable --now theraview-web.service || true
 
 sudo rm -f "$SYSTEMD_DIR/theraview-camera.service"
-sudo rm -f "$SYSTEMD_DIR/theraview-recorder.service"
 sudo rm -f "$SYSTEMD_DIR/theraview-web.service"
 
 sudo systemctl daemon-reload
