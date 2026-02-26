@@ -27,7 +27,9 @@ RECORDER_SERVICE = os.environ.get(
 )
 CAMERA_DEVICE = os.environ.get("CAMERA_DEVICE", os.environ.get("CAMERA", "/dev/video0"))
 FFPROBE = os.environ.get("FFPROBE", "ffprobe")
-STREAM_PORT = int(os.environ.get("STREAM_PORT", "5000"))
+STREAM_PORT = int(os.environ.get("RTSP_PORT", os.environ.get("STREAM_PORT", "8554")))
+STREAM_PATH = os.environ.get("RTSP_PATH", "live")
+LIVE_VIEW_PORT = int(os.environ.get("LIVE_VIEW_PORT", "8888"))
 HOSTNAME = socket.gethostname()
 
 os.makedirs(OUTDIR, exist_ok=True)
@@ -116,6 +118,48 @@ def get_cpu_usage_percent():
 
 def get_clock_time():
     return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def get_cpu_temp_c():
+    temp_path = "/sys/class/thermal/thermal_zone0/temp"
+    if not os.path.exists(temp_path):
+        return None
+    try:
+        with open(temp_path, "r", encoding="utf-8") as handle:
+            milli_c = int(handle.read().strip())
+    except (OSError, ValueError):
+        return None
+    return milli_c / 1000.0
+
+
+def parse_throttle_flags(hex_value):
+    flags = []
+    flag_map = {
+        0: "under-voltage",
+        1: "arm frequency capped",
+        2: "currently throttled",
+        3: "soft temperature limit active",
+        16: "under-voltage has occurred",
+        17: "arm frequency capping has occurred",
+        18: "throttling has occurred",
+        19: "soft temperature limit has occurred",
+    }
+    for bit, label in flag_map.items():
+        if hex_value & (1 << bit):
+            flags.append(label)
+    return flags
+
+
+def get_throttle_status():
+    output = run_command(["vcgencmd", "get_throttled"])
+    if not output:
+        return {"available": False, "raw": None, "flags": []}
+    raw = output.split("=", 1)[-1].strip()
+    try:
+        value = int(raw, 16)
+    except ValueError:
+        return {"available": True, "raw": raw, "flags": []}
+    return {"available": True, "raw": raw, "flags": parse_throttle_flags(value)}
 
 
 def get_rtc_status():
@@ -322,12 +366,12 @@ def get_primary_ip_info():
 
 
 def get_cleanup_plan():
-    converted_tag = "_converted.mkv"
+    converted_tag = "_converted.ts"
     prefixes = {}
     for name in os.listdir(OUTDIR):
         if not name.endswith(converted_tag):
             continue
-        match = re.match(r"^(.*)_[0-9]{5}_converted\.mkv$", name)
+        match = re.match(r"^(.*)_[0-9]{5}_converted\.ts$", name)
         if not match:
             continue
         base = match.group(1)
@@ -344,7 +388,7 @@ def get_cleanup_plan():
     return {"candidates": candidates, "blocked": []}
 
 
-def delete_mkv_chunks(prefixes):
+def delete_segment_chunks(prefixes):
     plan = get_cleanup_plan()
     allowed = {item["prefix"]: item for item in plan["candidates"]}
     deleted = []
@@ -361,21 +405,6 @@ def delete_mkv_chunks(prefixes):
             except OSError:
                 skipped.append(prefix)
                 break
-    return {"deleted": deleted, "skipped": skipped}
-
-
-def delete_all_files():
-    deleted = []
-    skipped = []
-    for name in sorted(os.listdir(OUTDIR)):
-        path = os.path.join(OUTDIR, name)
-        if not os.path.isfile(path):
-            continue
-        try:
-            os.remove(path)
-            deleted.append(name)
-        except OSError:
-            skipped.append(name)
     return {"deleted": deleted, "skipped": skipped}
 
 
@@ -468,6 +497,37 @@ def list_files():
     return entries
 
 
+def list_log_files():
+    entries = []
+    for name in sorted(os.listdir(LOGDIR)):
+        path = os.path.join(LOGDIR, name)
+        if not os.path.isfile(path):
+            continue
+        stat = os.stat(path)
+        entries.append(
+            {
+                "name": name,
+                "size": stat.st_size,
+                "mtime": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(stat.st_mtime)),
+            }
+        )
+    return entries
+
+
+def remove_recording_file(name):
+    safe_name = os.path.basename(name)
+    if safe_name != name:
+        return {"ok": False, "message": "Invalid file name."}
+    path = os.path.join(OUTDIR, safe_name)
+    if not os.path.isfile(path):
+        return {"ok": False, "message": "File not found."}
+    try:
+        os.remove(path)
+    except OSError as exc:
+        return {"ok": False, "message": str(exc)}
+    return {"ok": True, "deleted": safe_name}
+
+
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
@@ -493,8 +553,9 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/status":
             status = ensure_concat_status_current()
-            status["log_tail"] = tail_log()
             status["cpu_usage"] = get_cpu_usage_percent()
+            status["cpu_temp_c"] = get_cpu_temp_c()
+            status["throttle"] = get_throttle_status()
             status["clock_time"] = get_clock_time()
             status["rtc"] = get_rtc_status()
             recorder_service = get_service_status(RECORDER_SERVICE)
@@ -504,6 +565,8 @@ class Handler(BaseHTTPRequestHandler):
             status["wifi"] = get_wifi_info()
             status["network"] = get_primary_ip_info()
             status["stream_port"] = STREAM_PORT
+            status["stream_path"] = STREAM_PATH
+            status["live_view_port"] = LIVE_VIEW_PORT
             status["elapsed_seconds"] = None
             if status.get("running") and status.get("start_time"):
                 try:
@@ -515,6 +578,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/files":
             self._send_json({"files": list_files()})
+            return
+        if parsed.path == "/log-files":
+            self._send_json({"files": list_log_files()})
             return
         if parsed.path == "/cleanup-plan":
             self._send_json(get_cleanup_plan())
@@ -542,6 +608,32 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header(
                     "Content-Disposition", f'attachment; filename="{safe_name}"'
                 )
+                self.end_headers()
+                self.wfile.write(data)
+            except OSError:
+                self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "Read failed")
+            return
+        if parsed.path == "/log-open":
+            params = parse_qs(parsed.query)
+            name = params.get("name", [None])[0]
+            if not name:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Missing name")
+                return
+            safe_name = os.path.basename(name)
+            if safe_name != name:
+                self.send_error(HTTPStatus.BAD_REQUEST, "Invalid name")
+                return
+            path = os.path.join(LOGDIR, safe_name)
+            if not os.path.isfile(path):
+                self.send_error(HTTPStatus.NOT_FOUND, "Not found")
+                return
+            try:
+                with open(path, "rb") as handle:
+                    data = handle.read()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Content-Disposition", f'inline; filename="{safe_name}"')
                 self.end_headers()
                 self.wfile.write(data)
             except OSError:
@@ -593,12 +685,33 @@ class Handler(BaseHTTPRequestHandler):
                     status=HTTPStatus.BAD_REQUEST,
                 )
                 return
-            result = delete_mkv_chunks(prefixes)
+            result = delete_segment_chunks(prefixes)
             self._send_json({"ok": True, **result})
             return
-        if parsed.path == "/cleanup-all":
-            result = delete_all_files()
-            self._send_json({"ok": True, **result})
+        if parsed.path == "/delete-file":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = 0
+            body = self.rfile.read(length).decode("utf-8") if length else ""
+            try:
+                payload = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                self._send_json(
+                    {"ok": False, "message": "Invalid JSON"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+            name = payload.get("name")
+            if not isinstance(name, str) or not name:
+                self._send_json(
+                    {"ok": False, "message": "Missing file name."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+            result = remove_recording_file(name)
+            status_code = HTTPStatus.OK if result.get("ok") else HTTPStatus.BAD_REQUEST
+            self._send_json(result, status=status_code)
             return
         if parsed.path == "/service":
             try:
@@ -692,9 +805,12 @@ INDEX_HTML = """<!doctype html>
         <p id=\"clock\">Clock: --</p>
         <p id=\"rtc\">RTC: --</p>
         <p id=\"cpu\">CPU Usage: --</p>
+        <p id=\"cpu-temp\">CPU Temp: --</p>
+        <p id=\"throttle\">Throttle: --</p>
         <p id=\"wifi\">Wi-Fi: --</p>
         <p id=\"ip\">IP: --</p>
-        <p>Live stream (VLC): <a id=\"stream-link\" href=\"#\" target=\"_blank\" rel=\"noopener\">tcp://--</a> (expect 5s+ delay)</p>
+        <p><strong>Main Live View:</strong> <a id=\"stream-link\" href=\"#\" target=\"_blank\" rel=\"noopener\">http://--:8888/live/</a></p>
+        <p>VLC (RTSP): <a id=\"stream-link-rtsp\" href=\"#\" target=\"_blank\" rel=\"noopener\">rtsp://--:8554/live</a></p>
       </div>
       <div class=\"card\">
         <h3>Camera Recording</h3>
@@ -705,47 +821,32 @@ INDEX_HTML = """<!doctype html>
         </div>
       </div>
       <div class=\"card\">
-        <h3>Concat Job</h3>
+        <h3>MP4 Processing</h3>
         <div class=\"button-row\">
-          <button id=\"run\">Run concat_and_convert</button>
-          <button id=\"stop-concat\" class=\"secondary\">Stop concat_and_convert</button>
+          <button id=\"run\">Create Checked MP4</button>
+          <button id=\"stop-concat\" class=\"secondary\">Stop MP4 Processing</button>
         </div>
         <p id=\"status\">Status: idle</p>
         <p id=\"timing\">Start: -- | End: -- | Elapsed: --</p>
       </div>
-      <div class=\"card\">
-        <h3>Cleanup Converted Files</h3>
-        <p><strong>Warning:</strong> This deletes MKV chunks tagged as converted.</p>
-        <div class=\"button-row\">
-          <button id=\"review-cleanup\" class=\"secondary\">Review MKV cleanup</button>
-          <button id=\"confirm-cleanup\" class=\"danger\" disabled>Delete MKV chunks</button>
-        </div>
-        <div id=\"cleanup-warning\" class=\"cleanup-warning\" style=\"display:none;\">
-          <p>Files queued for deletion:</p>
-          <ul id=\"cleanup-list\"></ul>
-          <p id=\"cleanup-blocked\"></p>
-        </div>
-      </div>
-      <div class=\"card\">
-        <h3>Cleanup All Files</h3>
-        <p><strong>Serious Warning:</strong> This permanently deletes <em>all</em> recordings, including MP4 files.</p>
-        <div class=\"button-row\">
-          <button id=\"confirm-cleanup-all\" class=\"danger\">Delete ALL files</button>
-        </div>
-      </div>
     </div>
-    <section class=\"section\">
+    <section class="section">
       <h2>Files</h2>
       <table>
         <thead>
-          <tr><th>Name</th><th>Size (MB)</th><th>Modified</th><th>Download</th></tr>
+          <tr><th>Name</th><th>Size (MB)</th><th>Modified</th><th>Download</th><th>Delete</th></tr>
         </thead>
         <tbody id=\"files\"></tbody>
       </table>
     </section>
     <section class=\"section\">
-      <h2>Latest Log</h2>
-      <pre id=\"log\"></pre>
+      <h2>Log Files</h2>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Size (KB)</th><th>Modified</th><th>Open</th></tr>
+        </thead>
+        <tbody id=\"log-files\"></tbody>
+      </table>
     </section>
   </div>
 <script>
@@ -761,6 +862,19 @@ async function fetchStatus() {
   const cpuUsage = data.cpu_usage;
   const cpuText = cpuUsage === null || cpuUsage === undefined ? 'n/a' : `${cpuUsage.toFixed(1)}%`;
   document.getElementById('cpu').textContent = `CPU Usage: ${cpuText}`;
+  const cpuTemp = data.cpu_temp_c;
+  const tempText = cpuTemp === null || cpuTemp === undefined ? 'n/a' : `${cpuTemp.toFixed(1)}°C`;
+  document.getElementById('cpu-temp').textContent = `CPU Temp: ${tempText}`;
+  const throttle = data.throttle || {};
+  let throttleText = 'unavailable';
+  if (throttle.available) {
+    if (throttle.flags && throttle.flags.length) {
+      throttleText = `${throttle.raw || 'unknown'} (${throttle.flags.join(', ')})`;
+    } else {
+      throttleText = `${throttle.raw || '0x0'} (ok)`;
+    }
+  }
+  document.getElementById('throttle').textContent = `Throttle: ${throttleText}`;
   document.getElementById('hostname').textContent = data.hostname ? `(${data.hostname})` : '(n/a)';
   document.getElementById('clock').textContent = `Clock: ${data.clock_time || 'n/a'}`;
   const rtc = data.rtc || {};
@@ -772,12 +886,18 @@ async function fetchStatus() {
   const network = data.network || {};
   const ipLabel = network.ip ? `${network.ip}${network.interface ? ` (${network.interface})` : ''}` : 'n/a';
   document.getElementById('ip').textContent = `IP: ${ipLabel}`;
-  const streamPort = data.stream_port || 5000;
+  const liveViewPort = data.live_view_port || 8888;
+  const streamPath = data.stream_path || "live";
   const streamHost = network.ip || data.hostname || '0.0.0.0';
-  const streamLink = `tcp://${streamHost}:${streamPort}`;
+  const streamLink = `http://${streamHost}:${liveViewPort}/${streamPath}/`;
   const streamLinkEl = document.getElementById('stream-link');
   streamLinkEl.textContent = streamLink;
   streamLinkEl.href = streamLink;
+  const rtspPort = data.stream_port || 8554;
+  const rtspLink = `rtsp://${streamHost}:${rtspPort}/${streamPath}`;
+  const rtspLinkEl = document.getElementById('stream-link-rtsp');
+  rtspLinkEl.textContent = rtspLink;
+  rtspLinkEl.href = rtspLink;
   const recorder = data.recorder_summary || {};
   const recorderEl = document.getElementById('recorder');
   recorderEl.textContent = recorder.message || 'Recording status: unknown';
@@ -787,7 +907,6 @@ async function fetchStatus() {
   } else if (recorder.state === 'inactive') {
     recorderEl.classList.add('status-inactive');
   }
-  document.getElementById('log').textContent = data.log_tail || '';
 }
 
 async function fetchFiles() {
@@ -799,7 +918,42 @@ async function fetchFiles() {
     const row = document.createElement('tr');
     const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
     const downloadUrl = `/download?name=${encodeURIComponent(file.name)}`;
-    row.innerHTML = `<td>${file.name}</td><td>${sizeMb}</td><td>${file.mtime}</td><td><a href="${downloadUrl}">Download</a></td>`;
+    row.innerHTML = `<td>${file.name}</td><td>${sizeMb}</td><td>${file.mtime}</td><td><a href="${downloadUrl}">Download</a></td><td><button class="danger" data-delete-file="${file.name}">Delete</button></td>`;
+    tbody.appendChild(row);
+  });
+
+  document.querySelectorAll('[data-delete-file]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const fileName = button.getAttribute('data-delete-file');
+      const confirmDelete = confirm(`Delete file ${fileName}? This cannot be undone.`);
+      if (!confirmDelete) {
+        return;
+      }
+      const res = await fetch('/delete-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: fileName })
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        alert(data.message || 'Delete failed.');
+        return;
+      }
+      await fetchFiles();
+    });
+  });
+}
+
+async function fetchLogFiles() {
+  const res = await fetch('/log-files');
+  const data = await res.json();
+  const tbody = document.getElementById('log-files');
+  tbody.innerHTML = '';
+  data.files.forEach(file => {
+    const row = document.createElement('tr');
+    const sizeKb = (file.size / 1024).toFixed(1);
+    const openUrl = `/log-open?name=${encodeURIComponent(file.name)}`;
+    row.innerHTML = `<td>${file.name}</td><td>${sizeKb}</td><td>${file.mtime}</td><td><a href="${openUrl}" target="_blank" rel="noopener">Open</a></td>`;
     tbody.appendChild(row);
   });
 }
@@ -822,84 +976,6 @@ document.getElementById('stop-concat').addEventListener('click', async () => {
   await fetchStatus();
 });
 
-let cleanupPrefixes = [];
-
-document.getElementById('review-cleanup').addEventListener('click', async () => {
-  const res = await fetch('/cleanup-plan');
-  const data = await res.json();
-  const list = document.getElementById('cleanup-list');
-  const blocked = document.getElementById('cleanup-blocked');
-  const warning = document.getElementById('cleanup-warning');
-  list.innerHTML = '';
-  cleanupPrefixes = [];
-  if (data.candidates && data.candidates.length) {
-    data.candidates.forEach(item => {
-      cleanupPrefixes.push(item.prefix);
-      item.chunks.forEach(chunk => {
-        const li = document.createElement('li');
-        li.textContent = chunk.split('/').pop();
-        list.appendChild(li);
-      });
-    });
-    blocked.textContent = '';
-  } else {
-    const li = document.createElement('li');
-    li.textContent = 'No MKV chunks eligible for cleanup.';
-    list.appendChild(li);
-  }
-  if (data.blocked && data.blocked.length) {
-    blocked.textContent = `Blocked: ${data.blocked.map(item => `${item.prefix} (${item.reason})`).join('; ')}`;
-  } else {
-    blocked.textContent = '';
-  }
-  warning.style.display = 'block';
-  document.getElementById('confirm-cleanup').disabled = cleanupPrefixes.length === 0;
-});
-
-document.getElementById('confirm-cleanup').addEventListener('click', async () => {
-  if (!cleanupPrefixes.length) {
-    return;
-  }
-  const confirmDelete = confirm(`Delete ${cleanupPrefixes.length} recording groups of MKV chunks? This cannot be undone.`);
-  if (!confirmDelete) {
-    return;
-  }
-  const res = await fetch('/cleanup', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prefixes: cleanupPrefixes })
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    alert(data.message || 'Cleanup failed.');
-  } else {
-    alert(`Deleted ${data.deleted.length} MKV files. Skipped ${data.skipped.length} groups.`);
-  }
-  cleanupPrefixes = [];
-  document.getElementById('confirm-cleanup').disabled = true;
-  await fetchFiles();
-});
-
-document.getElementById('confirm-cleanup-all').addEventListener('click', async () => {
-  const confirmDelete = confirm('SERIOUS WARNING: This will permanently delete ALL recordings, including MP4 files. This cannot be undone.');
-  if (!confirmDelete) {
-    return;
-  }
-  const typed = prompt('Type DELETE ALL to confirm permanently deleting every recording file.');
-  if (typed !== 'DELETE ALL') {
-    alert('Cleanup all canceled. Confirmation phrase did not match.');
-    return;
-  }
-  const res = await fetch('/cleanup-all', { method: 'POST' });
-  const data = await res.json();
-  if (!data.ok) {
-    alert(data.message || 'Cleanup all failed.');
-    return;
-  }
-  alert(`Deleted ${data.deleted.length} files. Skipped ${data.skipped.length} files.`);
-  await fetchFiles();
-});
-
 async function controlService(target, action) {
   const res = await fetch('/service', {
     method: 'POST',
@@ -918,8 +994,10 @@ document.getElementById('recorder-stop').addEventListener('click', () => control
 
 fetchStatus();
 fetchFiles();
+fetchLogFiles();
 setInterval(fetchStatus, 5000);
 setInterval(fetchFiles, 15000);
+setInterval(fetchLogFiles, 15000);
 </script>
 </body>
 </html>
