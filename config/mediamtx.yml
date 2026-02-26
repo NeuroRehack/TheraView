@@ -1,0 +1,13 @@
+logLevel: info
+
+rtsp: yes
+rtspAddress: :8554
+
+hls: yes
+hlsAddress: :8888
+
+authMethod: internal
+
+paths:
+  live:
+    source: publisher
