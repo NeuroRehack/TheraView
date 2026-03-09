@@ -120,6 +120,54 @@ def get_clock_time():
     return time.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def validate_manual_time(value):
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip().replace("T", " ")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", normalized):
+        return None
+    return normalized
+
+
+def set_system_time(manual_time):
+    normalized = validate_manual_time(manual_time)
+    if not normalized:
+        return {
+            "ok": False,
+            "message": "Invalid time format. Use YYYY-MM-DD HH:MM:SS.",
+        }
+    try:
+        date_result = subprocess.run(
+            ["sudo", "date", "-s", normalized],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "message": str(exc)}
+    if date_result.returncode != 0:
+        message = date_result.stderr.strip() or date_result.stdout.strip() or "date command failed."
+        return {"ok": False, "message": message}
+
+    try:
+        rtc_result = subprocess.run(
+            ["sudo", "hwclock", "-w"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"ok": False, "message": f"System time set, but RTC write failed: {exc}"}
+
+    if rtc_result.returncode != 0:
+        message = rtc_result.stderr.strip() or rtc_result.stdout.strip() or "hwclock command failed."
+        return {"ok": False, "message": f"System time set, but RTC write failed: {message}"}
+
+    return {"ok": True, "message": f"System time set to {normalized} and written to RTC.", "time": normalized}
+
+
 def get_cpu_temp_c():
     temp_path = "/sys/class/thermal/thermal_zone0/temp"
     if not os.path.exists(temp_path):
@@ -742,6 +790,25 @@ class Handler(BaseHTTPRequestHandler):
             status_code = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST
             self._send_json(result, status=status_code)
             return
+        if parsed.path == "/set-time":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = 0
+            body = self.rfile.read(length).decode("utf-8") if length else ""
+            try:
+                payload = json.loads(body) if body else {}
+            except json.JSONDecodeError:
+                self._send_json(
+                    {"ok": False, "message": "Invalid JSON"},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+            requested_time = payload.get("time")
+            result = set_system_time(requested_time)
+            status_code = HTTPStatus.OK if result["ok"] else HTTPStatus.BAD_REQUEST
+            self._send_json(result, status=status_code)
+            return
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
 
@@ -792,6 +859,10 @@ INDEX_HTML = """<!doctype html>
     .status-inactive { color: #dc2626; font-weight: 600; }
     .section { margin-top: 2rem; }
     .cleanup-warning { margin-top: 0.75rem; padding: 0.75rem; border-radius: 10px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .time-set { margin-bottom: 0.9rem; display: grid; gap: 0.45rem; }
+    .time-set label { color: var(--text); font-weight: 600; }
+    .time-set input { padding: 0.5rem; border-radius: 8px; border: 1px solid var(--border); }
+    #set-time-status { font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -802,6 +873,12 @@ INDEX_HTML = """<!doctype html>
     <div class=\"meta\">
       <div class=\"card\">
         <h3>System</h3>
+        <div class=\"time-set\">
+          <label for=\"manual-time\">Set System Time</label>
+          <input id=\"manual-time\" type=\"datetime-local\" step=\"1\" />
+          <button id=\"set-time\" class=\"secondary\">Apply Time</button>
+          <p id=\"set-time-status\">Manual time update not run yet.</p>
+        </div>
         <p id=\"clock\">Clock: --</p>
         <p id=\"rtc\">RTC: --</p>
         <p id=\"cpu\">CPU Usage: --</p>
@@ -991,6 +1068,29 @@ async function controlService(target, action) {
 
 document.getElementById('recorder-start').addEventListener('click', () => controlService('recorder', 'start'));
 document.getElementById('recorder-stop').addEventListener('click', () => controlService('recorder', 'stop'));
+
+document.getElementById('set-time').addEventListener('click', async () => {
+  const input = document.getElementById('manual-time');
+  const statusEl = document.getElementById('set-time-status');
+  const value = (input.value || '').trim();
+  if (!value) {
+    statusEl.textContent = 'Please choose a date and time first.';
+    return;
+  }
+  const normalized = value.replace('T', ' ');
+  const formatted = normalized.length === 16 ? `${normalized}:00` : normalized;
+  const res = await fetch('/set-time', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ time: formatted })
+  });
+  const data = await res.json();
+  statusEl.textContent = data.message || 'Time update completed.';
+  if (!data.ok) {
+    alert(data.message || 'Failed to set time.');
+  }
+  await fetchStatus();
+});
 
 fetchStatus();
 fetchFiles();
