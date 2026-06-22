@@ -123,3 +123,89 @@ You can override defaults using environment variables (for systemd, set them in 
 - `LOGDIR` (default `/home/pi/TheraView/logs`)
 - `RECORD_WIDTH`, `RECORD_HEIGHT`, `FRAMERATE`, `RECORD_BITRATE`, `ROTATE_SECONDS`
 - `STREAM_BITRATE`, `RTSP_HOST`, `RTSP_PORT`, `RTSP_PATH`
+
+## Real-Time Clock (RTC) Module
+
+TheraView units can use a Gravity I2C DS1307 RTC module to keep accurate system time when the Raspberry Pi is not connected to the internet. This is useful because recording filenames, logs, and timestamps depend on the Pi’s system clock.
+
+> A schematic of the RTC wiring can be added here.
+
+#### RTC wiring
+
+Connect the Gravity I2C DS1307 RTC module to the Raspberry Pi as follows:
+
+| Gravity RTC pin |  Function | Raspberry Pi pin    |
+| --------------- | --------: | ------------------- |
+| Pin 6 `+`       |  5V power | Pin 2 — 5V          |
+| Pin 7 `-`       |    Ground | Pin 9 — GND         |
+| Pin 8 `C`       | I2C clock | Pin 5 — SCL / GPIO3 |
+| Pin 9 `D`       |  I2C data | Pin 3 — SDA / GPIO2 |
+
+#### Install I2C tools
+
+```bash
+sudo apt install -y python3-smbus i2c-tools
+```
+
+Check that the RTC is visible on the I2C bus:
+
+```bash
+i2cdetect -y 1
+```
+
+The DS1307 RTC normally appears at address `0x68`.
+
+#### Enable the DS1307 RTC overlay
+
+Edit the Raspberry Pi boot configuration:
+
+```bash
+sudo nano /boot/firmware/config.txt
+```
+
+Add this line at the end of the file:
+
+```ini
+dtoverlay=i2c-rtc,ds1307
+```
+
+On some older Raspberry Pi OS setups, the file may be located at:
+
+```bash
+/boot/config.txt
+```
+
+After saving the change, reboot the Pi:
+
+```bash
+sudo reboot
+```
+
+#### Test the RTC
+
+After reboot, check that the RTC device exists:
+
+```bash
+ls -l /dev/rtc*
+```
+
+Read the current RTC time:
+
+```bash
+sudo hwclock -r
+```
+
+If the RTC is detected correctly, set the RTC from the Pi’s current system time:
+
+```bash
+sudo hwclock -w
+```
+
+Then read it back to confirm:
+
+```bash
+sudo hwclock -r
+```
+
+Once configured, the RTC helps the Pi keep time between boots, even when the TheraView unit is offline.
+
