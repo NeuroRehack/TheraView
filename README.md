@@ -140,6 +140,8 @@ Connect the Gravity I2C DS1307 RTC module to the Raspberry Pi as follows:
 | Pin 8 `C`       | I2C clock | Pin 5 — SCL / GPIO3 |
 | Pin 9 `D`       |  I2C data | Pin 3 — SDA / GPIO2 |
 
+
+![RTC wiring](Wiring_RTC.png)
 #### Install I2C tools
 
 ```bash
