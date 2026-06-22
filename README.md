@@ -128,7 +128,6 @@ You can override defaults using environment variables (for systemd, set them in 
 
 TheraView units can use a Gravity I2C DS1307 RTC module to keep accurate system time when the Raspberry Pi is not connected to the internet. This is useful because recording filenames, logs, and timestamps depend on the Pi’s system clock.
 
-> A schematic of the RTC wiring can be added here.
 
 #### RTC wiring
 
